@@ -18,6 +18,21 @@ export default {
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!response.ok)return json({error:'Invio Telegram non riuscito'},502);
    }
+   if(message?.chat?.id && message?.from?.id && typeof message.text==='string' && message.text.trim().split(/\\s+/)[0].split('@')[0].toLowerCase()==='/nuovabattaglia'){
+    const chatId=String(message.chat.id),creatorId=String(message.from.id);
+    let reply;
+    try{
+     if(!env.DB)throw Error('Database non disponibile');
+     const battleId='battle_'+crypto.randomUUID().replaceAll('-','');
+     await env.DB.batch([
+      env.DB.prepare('INSERT INTO battles (id,chat_id,creator_id,state) VALUES (?,?,?,?)').bind(battleId,chatId,creatorId,'{}'),
+      env.DB.prepare('INSERT INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(battleId,creatorId,'master')
+     ]);
+     reply='⚔️ Battaglia creata!\\n\\nID: '+battleId+'\\nSei il primo Master.\\n\\nLa mappa condivisa e gli inviti ai giocatori saranno disponibili nel prossimo aggiornamento.';
+    }catch(e){reply='⚠️ Non sono riuscito a creare la battaglia. Riprova tra poco.'}
+    const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:reply})});
+    if(!response.ok)return json({error:'Invio Telegram non riuscito'},502);
+   }
    return json({ok:true});
   }
   if(url.pathname==='/api/demo'&&['GET','POST'].includes(request.method)){
