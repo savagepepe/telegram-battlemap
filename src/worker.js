@@ -53,6 +53,18 @@ export default {
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:reply,reply_markup:replyMarkup})});
     if(!response.ok)return json({error:'Invio Telegram non riuscito'},502);
    }
+   if(message?.chat?.type==='private'&&message?.from?.id&&typeof message.text==='string'&&message.text.trim().startsWith('/apri ')){
+    const battleId=message.text.trim().split(/\s+/)[1];
+    let reply='ID battaglia non valido',markup;
+    if(validId(battleId)&&battleId.startsWith('battle_')){
+     const battle=await env.DB.prepare('SELECT id FROM battles WHERE id=? AND chat_id<>?').bind(battleId,'demo').first();
+     if(battle){
+      reply='Apri la battaglia per partecipare come giocatore.';
+      markup={inline_keyboard:[[{text:'🗺️ Entra nella battaglia',web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/?battle='+battleId}}]]};
+     }else reply='Battaglia non trovata';
+    }
+    await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:reply,reply_markup:markup})});
+   }
    return json({ok:true});
   }
   if(url.pathname==='/api/battle'&&['GET','POST'].includes(request.method)){
