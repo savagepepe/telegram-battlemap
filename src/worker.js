@@ -5,6 +5,13 @@ export default {
  async fetch(request,env){
   const url=new URL(request.url);
   if(url.pathname==='/health')return json({ok:true,app:'telegram-battlemap',status:'d1-demo'});
+  if(url.pathname==='/telegram/setup'&&request.method==='GET'){
+   if(!env.TELEGRAM_BOT_TOKEN||!env.TELEGRAM_WEBHOOK_SECRET)return json({ok:false,error:'Segreti mancanti'},503);
+   const webhookUrl='https://telegram-battlemap.marcpetruzzi.workers.dev/telegram/webhook';
+   const res=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/setWebhook',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:webhookUrl,secret_token:env.TELEGRAM_WEBHOOK_SECRET,allowed_updates:['message']})});
+   const result=await res.json().catch(()=>({ok:false,description:'Risposta Telegram non valida'}));
+   return json({ok:result.ok===true,description:result.description||'Webhook configurato'},result.ok?200:502);
+  }
   if(url.pathname==='/telegram/webhook'){
    if(request.method!=='POST')return json({error:'Metodo non consentito'},405);
    if(!env.TELEGRAM_BOT_TOKEN||!env.TELEGRAM_WEBHOOK_SECRET)return json({error:'Bot non configurato'},503);
