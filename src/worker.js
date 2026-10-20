@@ -121,6 +121,21 @@ export default {
      await env.DB.batch([env.DB.prepare('INSERT INTO battles(id,chat_id,creator_id,state) VALUES(?,?,?,?)').bind(id,'private_'+uid,uid,JSON.stringify({name,published:false})),env.DB.prepare('INSERT INTO members(battle_id,user_id,role) VALUES(?,?,?)').bind(id,uid,'master')]);
      return json({ok:true,id});
     }
+    if(body?.action==='delete'){
+     const id=body.id;
+     if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
+     const owned=await env.DB.prepare('SELECT id FROM battles WHERE id=? AND creator_id=?').bind(id,uid).first();
+     if(!owned)return json({error:'Solo il creatore può eliminare la battaglia'},403);
+     await env.DB.batch([
+      env.DB.prepare('DELETE FROM requests WHERE battle_id=?').bind(id),
+      env.DB.prepare('DELETE FROM token_sizes WHERE token_id IN (SELECT id FROM tokens WHERE battle_id=?)').bind(id),
+      env.DB.prepare('DELETE FROM tokens WHERE battle_id=?').bind(id),
+      env.DB.prepare('DELETE FROM battle_maps WHERE battle_id=?').bind(id),
+      env.DB.prepare('DELETE FROM members WHERE battle_id=?').bind(id),
+      env.DB.prepare('DELETE FROM battles WHERE id=? AND creator_id=?').bind(id,uid)
+     ]);
+     return json({ok:true});
+    }
     if(body?.action==='publish'){
      const id=body.id;
      if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
