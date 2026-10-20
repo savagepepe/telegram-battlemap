@@ -152,15 +152,18 @@ export default {
       const {results:all}=await env.DB.prepare('SELECT id,name,emoji FROM tokens WHERE battle_id=?').bind(id).all();
       const selected=body.tokenIds.map(tid=>all.find(t=>t.id===tid));
       if(selected.some(t=>!t))return json({error:'Pedina non trovata'},404);
-      initiative={participants:selected,deck:newDeck(),order:[],turn:0,round:0,revealed:0,redrawRequests:[]};
+      const cardCounts={};let total=0;
+      for(const t of selected){const n=body.cardCounts?.[t.id]??1;if(!Number.isInteger(n)||n<1||n>4)return json({error:'Carte per pedina: da 1 a 4'},400);cardCounts[t.id]=n;total+=n}
+      if(total>54)return json({error:'Massimo 54 carte complessive'},400);
+      initiative={participants:selected,cardCounts,deck:newDeck(),order:[],turn:0,round:0,revealed:0,redrawRequests:[]};
      }else if(!initiative)return json({error:'Avvia prima il combattimento'},409);
      if(action==='initiativeRound'||action==='initiativeStart'){
-      const count=initiative.participants.length;
+      const count=initiative.participants.reduce((sum,t)=>sum+(initiative.cardCounts?.[t.id]||1),0);
       if(initiative.reshuffleNext||initiative.deck.length<count){initiative.deck=newDeck();initiative.reshuffleNext=false}
-      const drawn=initiative.participants.map(t=>({...t,card:initiative.deck.pop()}));
+      const drawn=initiative.participants.map(t=>{const cards=Array.from({length:initiative.cardCounts?.[t.id]||1},()=>initiative.deck.pop());return {...t,card:cards.reduce((best,c)=>c.value>best.value?c:best),cards}});
       initiative.order=drawn.sort((a,b)=>b.card.value-a.card.value);
       initiative.round=(initiative.round||0)+1;initiative.turn=0;initiative.revealed=0;initiative.redrawRequests=[];
-      if(drawn.some(t=>t.card.value>=52))initiative.reshuffleNext=true;
+      if(drawn.some(t=>t.cards.some(c=>c.value>=52)))initiative.reshuffleNext=true;
 
      }
      if(action==='initiativeReveal')initiative.revealed=Math.min(initiative.order.length,(initiative.revealed??initiative.order.length)+1);
