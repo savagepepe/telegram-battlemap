@@ -137,7 +137,7 @@ export default {
      const newDeck=()=>{const cards=[];for(let suit=0;suit<4;suit++)for(let rank=0;rank<13;rank++)cards.push({label:ranks[rank]+suits[suit],value:rank*4+suit});cards.push({label:'🃏 Jolly rosso',value:53},{label:'🃏 Jolly nero',value:52});for(let i=cards.length-1;i>0;i--){const j=crypto.getRandomValues(new Uint32Array(1))[0]%(i+1);[cards[i],cards[j]]=[cards[j],cards[i]]}return cards};
      if(action==='initiativeReset'){initiative=null}
      else if(action==='initiativeStart'){
-      if(!Array.isArray(body.tokenIds)||body.tokenIds.length<1||body.tokenIds.length>100||new Set(body.tokenIds).size!==body.tokenIds.length||body.tokenIds.some(x=>typeof x!=='string'))return json({error:'Seleziona le pedine partecipanti'},400);
+      if(!Array.isArray(body.tokenIds)||body.tokenIds.length<1||body.tokenIds.length>54||new Set(body.tokenIds).size!==body.tokenIds.length||body.tokenIds.some(x=>typeof x!=='string'))return json({error:'Seleziona le pedine partecipanti'},400);
       const {results:all}=await env.DB.prepare('SELECT id,name,emoji FROM tokens WHERE battle_id=?').bind(id).all();
       const selected=body.tokenIds.map(tid=>all.find(t=>t.id===tid));
       if(selected.some(t=>!t))return json({error:'Pedina non trovata'},404);
