@@ -118,7 +118,7 @@ export default {
      const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON current.chat_id=source.chat_id WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>i<(state.initiative.revealed??state.initiative.order.length)?t:{id:t.id,name:t.name,emoji:t.emoji,card:null}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>i<(state.initiative.revealed??state.initiative.order.length)?t:{id:t.id,name:t.name,emoji:t.emoji,card:null,cards:[]}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -176,7 +176,7 @@ export default {
        if(!initiative.deck.length)initiative.deck=newDeck();
        const entry=initiative.order.find(t=>t.id===tid);
        if(!entry)return json({error:'Pedina non trovata'},404);
-       entry.card=initiative.deck.pop();
+       entry.card=initiative.deck.pop();entry.cards=[entry.card];
        if(entry.card.value>=52)initiative.reshuffleNext=true;
        initiative.order.sort((a,b)=>b.card.value-a.card.value);
        initiative.turn=0;initiative.revealed=0;
