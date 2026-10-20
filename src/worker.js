@@ -5,6 +5,21 @@ export default {
  async fetch(request,env){
   const url=new URL(request.url);
   if(url.pathname==='/health')return json({ok:true,app:'telegram-battlemap',status:'d1-demo'});
+  if(url.pathname==='/telegram/webhook'){
+   if(request.method!=='POST')return json({error:'Metodo non consentito'},405);
+   if(!env.TELEGRAM_BOT_TOKEN||!env.TELEGRAM_WEBHOOK_SECRET)return json({error:'Bot non configurato'},503);
+   const received=request.headers.get('X-Telegram-Bot-Api-Secret-Token');
+   if(!received||received!==env.TELEGRAM_WEBHOOK_SECRET)return json({error:'Non autorizzato'},403);
+   const update=await request.json().catch(()=>null);
+   const message=update?.message;
+   if(message?.chat?.id&&/^\\/start(?:@\\w+)?(?:\\s|$)/i.test(message.text||'')){
+    const chatId=message.chat.id;
+    const payload={chat_id:chatId,text:'⚔️ Benvenuto in RPG Battle Map! Apri la mappa dimostrativa con il pulsante qui sotto.',reply_markup:{inline_keyboard:[[{text:'🗺️ Apri Battle Map',web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/'}}]]}};
+    const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!response.ok)return json({error:'Invio Telegram non riuscito'},502);
+   }
+   return json({ok:true});
+  }
   if(url.pathname==='/api/demo'&&['GET','POST'].includes(request.method)){
    const id=url.searchParams.get('id');
    if(!validId(id))return json({error:'ID partita non valido'},400);
