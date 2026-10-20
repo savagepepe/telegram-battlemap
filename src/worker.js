@@ -119,7 +119,7 @@ export default {
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON current.chat_id=source.chat_id WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
      for(const t of results)t.conditions=(battleState.tokenStates||{})[t.id]||{wounds:0,shaken:false,distracted:false,vulnerable:false};
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>(canMaster||i<(state.initiative.revealed??state.initiative.order.length)||results.some(u=>u.id===t.id&&String(u.owner_id)===userId&&!!user))?t:{id:t.id,name:t.name,emoji:t.emoji,card:null,cards:[]}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,areas:(state.areas||[]).filter(a=>a.status==='approved'||(user&&(canMaster||a.owner===userId))),initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>(canMaster||i<(state.initiative.revealed??state.initiative.order.length)||results.some(u=>u.id===t.id&&String(u.owner_id)===userId&&!!user))?t:{id:t.id,name:t.name,emoji:t.emoji,card:null,cards:[]}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -129,6 +129,24 @@ export default {
      return json({ok:true});
     }
     if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
+    if(['areaSubmit','areaApprove','areaReject','areaDelete'].includes(body?.action)){
+     if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
+     const areas=Array.isArray(battleState.areas)?battleState.areas:[];
+     if(body.action==='areaSubmit'){
+      const a=body.area;
+      if(!a||!['small','medium','large','cone','line'].includes(a.shape)||!a.origin||![a.origin.x,a.origin.y].every(v=>Number.isFinite(v)&&v>=0&&v<gridSize)||(['cone','line'].includes(a.shape)&&(!a.target||![a.target.x,a.target.y].every(v=>Number.isFinite(v)&&v>=0&&v<gridSize))))return json({error:'Sagoma non valida'},400);
+      if(areas.length>=50)return json({error:'Troppe sagome'},409);
+      areas.push({id:crypto.randomUUID(),shape:a.shape,origin:{x:a.origin.x,y:a.origin.y},target:a.target?{x:a.target.x,y:a.target.y}:null,owner:userId,status:canMaster?'approved':'pending'});
+     }else{
+      if(!canMaster)return json({error:'Solo il Master può approvare o eliminare sagome'},403);
+      const i=areas.findIndex(a=>a.id===body.areaId);if(i<0)return json({error:'Sagoma non trovata'},404);
+      if(body.action==='areaDelete'||body.action==='areaReject')areas.splice(i,1);
+      else areas[i].status='approved';
+     }
+     battleState.areas=areas;
+     await env.DB.prepare('UPDATE battles SET state=? WHERE id=?').bind(JSON.stringify(battleState),id).run();
+     return json({ok:true});
+    }
     if(body?.action==='setTokenConditions'){
      if(!canMaster)return json({error:'Solo il Master può modificare gli stati'},403);
      const token=await env.DB.prepare('SELECT id FROM tokens WHERE battle_id=? AND id=?').bind(id,body.tokenId).first();
