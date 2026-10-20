@@ -1,0 +1,1 @@
+(()=>{'use strict';const tg=window.Telegram?.WebApp;const q=new URLSearchParams(location.search);const id=tg?.initDataUnsafe?.start_param||q.get('tgWebAppStartParam');if(/^battle_[a-zA-Z0-9_-]{8,73}$/.test(id||'')&&!q.get('battle')){q.set('battle',id);history.replaceState(null,'',location.pathname+'?'+q.toString()+location.hash)}tg?.ready()})();
