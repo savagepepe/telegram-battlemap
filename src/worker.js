@@ -153,6 +153,7 @@ export default {
      if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
      const owned=await env.DB.prepare('SELECT id FROM battles WHERE id=? AND creator_id=?').bind(id,uid).first();
      if(!owned)return json({error:'Solo il creatore può eliminare la battaglia'},403);
+     await env.DB.prepare('CREATE TABLE IF NOT EXISTS map_uploads (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,content_type TEXT NOT NULL,data BLOB NOT NULL)').run();
      await env.DB.batch([
       env.DB.prepare('DELETE FROM requests WHERE battle_id=?').bind(id),
       env.DB.prepare('DELETE FROM token_sizes WHERE token_id IN (SELECT id FROM tokens WHERE battle_id=?)').bind(id),
