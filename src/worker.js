@@ -98,7 +98,7 @@ export default {
    const id=url.searchParams.get('battle'),mapId=url.searchParams.get('map');
    if(!validId(id)||!validId(mapId)||!env.DB||!env.TELEGRAM_BOT_TOKEN)return json({error:'Mappa non valida'},400);
    try{
-    const map=await env.DB.prepare('SELECT bm.file_id FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR current.id=source.id OR (current.chat_id=\'private_\' || current.creator_id AND source.creator_id=current.creator_id)) WHERE bm.id=? AND current.id=?').bind(mapId,id).first();
+    const map=await env.DB.prepare('SELECT bm.file_id FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR current.id=source.id OR (current.creator_id=source.creator_id)) WHERE bm.id=? AND current.id=?').bind(mapId,id).first();
     if(!map)return json({error:'Immagine non trovata'},404);
     const r=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/getFile?file_id='+encodeURIComponent(map.file_id));
     const data=await r.json();
@@ -175,7 +175,7 @@ export default {
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
      const members=canMaster?(await env.DB.prepare('SELECT m.user_id,m.role,n.display_name FROM members m LEFT JOIN battle_user_names n ON n.user_id=m.user_id WHERE m.battle_id=? ORDER BY m.user_id').bind(id).all()).results:[];
-     const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.chat_id=\'private_\' || current.creator_id AND source.creator_id=current.creator_id)) WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
+     const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.creator_id=source.creator_id)) WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
      for(const t of results)t.conditions=(battleState.tokenStates||{})[t.id]||{wounds:0,shaken:false,distracted:false,vulnerable:false};
      return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,areas:(state.areas||[]).filter(a=>a.status==='approved'||(user&&(canMaster||a.owner===userId))),initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>(canMaster||i<(state.initiative.revealed??state.initiative.order.length)||results.some(u=>u.id===t.id&&String(u.owner_id)===userId&&!!user))?t:{id:t.id,name:t.name,emoji:t.emoji,card:null,cards:[]}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
@@ -297,7 +297,7 @@ export default {
     if(body?.action==='setMap'){
      if(!canMaster)return json({error:'Solo i Master possono cambiare mappa'},403);
      if(body.mapId!==null&&(typeof body.mapId!=='string'||!validId(body.mapId)))return json({error:'Mappa non valida'},400);
-     if(body.mapId){const found=await env.DB.prepare('SELECT bm.id FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.chat_id=\'private_\' || current.creator_id AND source.creator_id=current.creator_id)) WHERE bm.id=? AND current.id=?').bind(body.mapId,id).first();if(!found)return json({error:'Mappa non trovata'},404)}
+     if(body.mapId){const found=await env.DB.prepare('SELECT bm.id FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.creator_id=source.creator_id)) WHERE bm.id=? AND current.id=?').bind(body.mapId,id).first();if(!found)return json({error:'Mappa non trovata'},404)}
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
      state.activeMap=body.mapId;
      await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(state),id).run();
