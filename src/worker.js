@@ -28,12 +28,23 @@ export default {
       env.DB.prepare('INSERT INTO battles (id,chat_id,creator_id,state) VALUES (?,?,?,?)').bind(battleId,chatId,creatorId,'{}'),
       env.DB.prepare('INSERT INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(battleId,creatorId,'master')
      ]);
-     reply='⚔️ Battaglia creata!\\n\\nID: '+battleId+'\\nSei il primo Master.\\n\\nLa mappa condivisa e gli inviti ai giocatori saranno disponibili nel prossimo aggiornamento.';
+     reply='⚔️ Battaglia creata!\n\nID: '+battleId+'\nSei il primo Master.\n\nMappa condivisa (per ora sola visualizzazione):\nhttps://telegram-battlemap.marcpetruzzi.workers.dev/?battle='+battleId;
     }catch(e){reply='⚠️ Non sono riuscito a creare la battaglia. Riprova tra poco.'}
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:reply})});
     if(!response.ok)return json({error:'Invio Telegram non riuscito'},502);
    }
    return json({ok:true});
+  }
+  if(url.pathname==='/api/battle'&&request.method==='GET'){
+   const id=url.searchParams.get('id');
+   if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
+   if(!env.DB)return json({error:'Database non disponibile'},503);
+   try{
+    const battle=await env.DB.prepare('SELECT id FROM battles WHERE id=? AND chat_id<>?').bind(id,'demo').first();
+    if(!battle)return json({error:'Battaglia non trovata'},404);
+    const {results}=await env.DB.prepare('SELECT id,name,x,y,emoji FROM tokens WHERE battle_id=? ORDER BY id').bind(id).all();
+    return json({tokens:results,readonly:true});
+   }catch(e){return json({error:'Errore database'},500)}
   }
   if(url.pathname==='/api/demo'&&['GET','POST'].includes(request.method)){
    const id=url.searchParams.get('id');
