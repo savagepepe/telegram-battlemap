@@ -77,11 +77,14 @@ export default {
      if(!canMaster)return json({error:'Solo i Master possono creare pedine'},403);
      const name=typeof body.name==='string'?body.name.trim():'';
      const emoji=typeof body.emoji==='string'?body.emoji.trim():'';
-     if(!name||name.length>40||!emoji||emoji.length>16||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=12||body.y<0||body.y>=12)return json({error:'Dati pedina non validi'},400);
-     const occupied=await env.DB.prepare('SELECT id FROM tokens WHERE battle_id=? AND x=? AND y=?').bind(id,body.x,body.y).first();
-     if(occupied)return json({error:'Casella occupata'},409);
+     if(!name||name.length>40||!emoji||emoji.length>16)return json({error:'Dati pedina non validi'},400);
+     const {results:occupied}=await env.DB.prepare('SELECT x,y FROM tokens WHERE battle_id=?').bind(id).all();
+     const used=new Set(occupied.map(t=>t.x+','+t.y));
+     let cell=null;
+     for(let y=0;y<12&&!cell;y++)for(let x=0;x<12;x++)if(!used.has(x+','+y)){cell={x,y};break}
+     if(!cell)return json({error:'La griglia è piena'},409);
      const tokenId='token_'+crypto.randomUUID().replaceAll('-','');
-     await env.DB.prepare('INSERT INTO tokens (id,battle_id,owner_id,name,x,y,emoji) VALUES (?,?,?,?,?,?,?)').bind(tokenId,id,null,name,body.x,body.y,emoji).run();
+     await env.DB.prepare('INSERT INTO tokens (id,battle_id,owner_id,name,x,y,emoji) VALUES (?,?,?,?,?,?,?)').bind(tokenId,id,null,name,cell.x,cell.y,emoji).run();
      return json({ok:true,tokenId});
     }
     if(!body||typeof body.tokenId!=='string'||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=12||body.y<0||body.y>=12)return json({error:'Movimento non valido'},400);
