@@ -1,0 +1,23 @@
+:root{color-scheme:dark;--bg:#101824;--surface:#1d2b3b;--surface2:#26394d;--edge:#3a5266;--gold:#e7ba65;--ink:#f1f5f9;--muted:#bac8d6}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{max-width:880px;margin:0 auto!important;padding:16px 12px 40px!important;background:radial-gradient(ellipse at top,#23364a 0%,#101824 68%) fixed!important;color:var(--ink)!important;font-family:system-ui,-apple-system,sans-serif!important;line-height:1.45}
+h2{margin:6px 0 14px;font-size:clamp(24px,5vw,32px);letter-spacing:.3px;color:#f7d898;text-shadow:0 2px 12px #0008}
+#info{background:#1c3043;border:1px solid var(--edge);border-left:4px solid var(--gold);border-radius:12px;margin-bottom:12px;padding:12px!important;color:var(--muted);font-size:14px}
+#map{display:block;border:2px solid #ad9162;border-radius:12px!important;box-shadow:0 9px 26px #0008;width:100%}
+button{appearance:none;background:linear-gradient(180deg,#344c62,#26384a);color:#f7f9fc;border:1px solid #4d667d;border-radius:10px!important;font-weight:650;min-height:42px;padding:10px 13px!important;margin:5px 3px!important;box-shadow:0 2px 5px #0003;transition:background .15s,transform .15s}
+button:active{transform:scale(.97);background:#45647c}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+button[hidden],section[hidden],div[hidden]{display:none!important}
+#addToken,#joinBattle,#initiativeStart,#initiativeReveal,#areaShare,#conditionsSave,#tokenSave,#gridSave,#mapSave,#mapViewSave,#masterSave{background:linear-gradient(180deg,#bb8a3c,#886124);border-color:#e2b96e;color:#fff}
+#tokenDelete,#initiativeReset{background:#70383c;border-color:#ad6268}
+#measureButton,#areaButton,#initiativeButton,#conditionsButton{border-color:#b08b51}
+#tokenEditor,#masterPanel,#mapPanel,#gridPanel,#initiativePanel,#areaPanel,#conditionsPanel{background:linear-gradient(180deg,#273b50,#1c2a3a)!important;border:1px solid var(--edge);border-radius:14px!important;box-shadow:0 10px 22px #0005;padding:14px!important;margin:10px 0 14px!important}
+label{color:#e1eaf3;line-height:1.8}
+input,select{background:#142232;color:#f1f5f9;border:1px solid #52687c;border-radius:9px!important;max-width:100%;min-height:40px}
+input[type=checkbox]{min-height:unset;accent-color:#e5b663;vertical-align:middle}
+input[type=range]{accent-color:#e5b663}
+#initiativeList p{border-bottom:1px solid #496075;padding:8px 6px;margin:3px 0}
+#areaRequests>div{background:#182a3b;border:1px solid #496075;border-radius:9px;padding:7px}
+#measureResult{display:inline-block;color:#ffdc8a;font-weight:700;padding:5px}
+@media(max-width:480px){body{padding:10px 8px 32px!important}button{font-size:14px!important;padding:9px 10px!important}select{width:min(100%,360px)}}
