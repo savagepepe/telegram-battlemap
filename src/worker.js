@@ -12,7 +12,7 @@ export default {
    if(!received||received!==env.TELEGRAM_WEBHOOK_SECRET)return json({error:'Non autorizzato'},403);
    const update=await request.json().catch(()=>null);
    const message=update?.message;
-   if(message?.chat?.id&&/^\\/start(?:@\\w+)?(?:\\s|$)/i.test(message.text||'')){
+   if(message?.chat?.id && typeof message.text === 'string' && message.text.split(' ')[0].split('@')[0] === '/start'){
     const chatId=message.chat.id;
     const payload={chat_id:chatId,text:'⚔️ Benvenuto in RPG Battle Map! Apri la mappa dimostrativa con il pulsante qui sotto.',reply_markup:{inline_keyboard:[[{text:'🗺️ Apri Battle Map',web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/'}}]]}};
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
