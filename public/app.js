@@ -32,7 +32,7 @@ assignButton.onclick=async()=>{
  if(choice===null)return;
  const index=Number(choice)-1;if(!Number.isInteger(index)||index<0||index>=units.length){alert('Numero pedina non valido');return}
  const players=members.filter(m=>m.role==='player');
- const list=players.map((m,i)=>(i+1)+'. Utente Telegram '+m.user_id).join('\n');
+ const list=players.map((m,i)=>(i+1)+'. '+(m.display_name||'Utente Telegram '+m.user_id)).join('\n');
  const selected=prompt('Scegli un giocatore:\n0. Nessuno (libera pedina)\n'+(list||'Nessun giocatore iscritto'));
  if(selected===null)return;
  const n=Number(selected);
