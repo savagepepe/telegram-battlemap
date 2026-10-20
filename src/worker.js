@@ -104,6 +104,36 @@ export default {
     return new Response(file.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'private, max-age=60','X-Content-Type-Options':'nosniff'}});
    }catch{return json({error:'Errore caricamento immagine'},502)}
   }
+  if(url.pathname==='/api/my-battles'){
+   if(!env.DB)return json({error:'Database non disponibile'},503);
+   const user=await telegramUser(request,env.TELEGRAM_BOT_TOKEN);
+   if(!user)return json({error:'Apri la Mini App da Telegram'},403);
+   const uid=String(user.id);
+   if(request.method==='GET'){
+    const {results}=await env.DB.prepare("SELECT id,state,updated_at,chat_id FROM battles WHERE creator_id=? AND chat_id<>? ORDER BY updated_at DESC LIMIT 100").bind(uid,'demo').all();
+    return json({battles:results.map(b=>{let state={};try{state=JSON.parse(b.state||'{}')}catch{}return{id:b.id,name:state.name||'Battaglia',private:b.chat_id==='private_'+uid&&!state.published,updated_at:b.updated_at}})});
+   }
+   if(request.method==='POST'){
+    const body=await request.json().catch(()=>null);
+    if(body?.action==='create'){
+     const name=String(body.name||'Nuova battaglia').trim().slice(0,60)||'Nuova battaglia';
+     const id='battle_'+crypto.randomUUID().replaceAll('-','');
+     await env.DB.batch([env.DB.prepare('INSERT INTO battles(id,chat_id,creator_id,state) VALUES(?,?,?,?)').bind(id,'private_'+uid,uid,JSON.stringify({name,published:false})),env.DB.prepare('INSERT INTO members(battle_id,user_id,role) VALUES(?,?,?)').bind(id,uid,'master')]);
+     return json({ok:true,id});
+    }
+    if(body?.action==='publish'){
+     const id=body.id;
+     if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
+     const b=await env.DB.prepare('SELECT state,creator_id FROM battles WHERE id=?').bind(id).first();
+     if(!b||String(b.creator_id)!==uid)return json({error:'Solo il creatore può condividere'},403);
+     let state={};try{state=JSON.parse(b.state||'{}')}catch{}
+     state.published=true;
+     await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(state),id).run();
+     return json({ok:true,url:'https://t.me/RpgBattleMapBot/battlemap?startapp='+id});
+    }
+   }
+   return json({error:'Richiesta non valida'},400);
+  }
   if(url.pathname==='/api/battle'&&['GET','POST'].includes(request.method)){
    const id=url.searchParams.get('id');
    if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
@@ -119,6 +149,7 @@ export default {
     const role=userId===String(battle.creator_id)?'creator':member?.role||'visitor';
     const canMaster=role==='creator'||role==='master';
     let battleState={};try{battleState=JSON.parse(battle.state||'{}')}catch{}
+    if(battle.chat_id==='private_'+String(battle.creator_id)&&!battleState.published&&!canMaster)return json({error:'Battaglia privata: attendi la condivisione del Master'},403);
     const gridSize=Number.isInteger(battleState.gridSize)&&battleState.gridSize>=6&&battleState.gridSize<=40?battleState.gridSize:12;
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
