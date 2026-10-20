@@ -33,6 +33,19 @@ export default {
    if(!received||received!==env.TELEGRAM_WEBHOOK_SECRET)return json({error:'Non autorizzato'},403);
    const update=await request.json().catch(()=>null);
    const message=update?.message;
+   if(message?.chat?.id&&message?.from?.id&&Array.isArray(message.photo)&&/^\\/mappa(?:@\\w+)?(?:\\s|$)/i.test(message.caption||'')){
+    const chatId=String(message.chat.id),userId=String(message.from.id);
+    const name=(message.caption||'').replace(/^\\/mappa(?:@\\w+)?/i,'').trim().slice(0,60)||'Mappa';
+    try{
+     await env.DB.prepare('CREATE TABLE IF NOT EXISTS battle_maps (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,name TEXT NOT NULL,file_id TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
+     const battle=await env.DB.prepare('SELECT b.id FROM battles b LEFT JOIN members m ON m.battle_id=b.id AND m.user_id=? WHERE b.chat_id=? AND (b.creator_id=? OR m.role=?) ORDER BY b.updated_at DESC LIMIT 1').bind(userId,chatId,userId,'master').first();
+     if(battle){
+      const photo=message.photo[message.photo.length-1];
+      await env.DB.prepare('INSERT INTO battle_maps(id,battle_id,name,file_id) VALUES(?,?,?,?)').bind('map_'+crypto.randomUUID().replaceAll('-',''),battle.id,name,photo.file_id).run();
+      await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:'🗺️ Mappa «'+name+'» aggiunta. Apri Battle Map per selezionarla.'})});
+     }
+    }catch(e){return json({error:'Errore salvataggio riferimento mappa'},500)}
+   }
    if(message?.chat?.id && typeof message.text === 'string' && message.text.split(' ')[0].split('@')[0] === '/start'){
     const chatId=message.chat.id;
     const payload={chat_id:chatId,text:'⚔️ Benvenuto in RPG Battle Map! Apri la mappa dimostrativa con il pulsante qui sotto.',reply_markup:{inline_keyboard:[[{text:'🗺️ Apri Battle Map',web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/'}}]]}};
@@ -70,13 +83,28 @@ export default {
    }
    return json({ok:true});
   }
+  if(url.pathname==='/api/map-image'){
+   const id=url.searchParams.get('battle'),mapId=url.searchParams.get('map');
+   if(!validId(id)||!validId(mapId)||!env.DB||!env.TELEGRAM_BOT_TOKEN)return json({error:'Mappa non valida'},400);
+   try{
+    const map=await env.DB.prepare('SELECT file_id FROM battle_maps WHERE id=? AND battle_id=?').bind(mapId,id).first();
+    if(!map)return json({error:'Immagine non trovata'},404);
+    const r=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/getFile?file_id='+encodeURIComponent(map.file_id));
+    const data=await r.json();
+    if(!data.ok||!data.result?.file_path)return json({error:'File Telegram non disponibile'},502);
+    const file=await fetch('https://api.telegram.org/file/bot'+env.TELEGRAM_BOT_TOKEN+'/'+data.result.file_path);
+    if(!file.ok)return json({error:'Immagine non disponibile'},502);
+    return new Response(file.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'private, max-age=60','X-Content-Type-Options':'nosniff'}});
+   }catch{return json({error:'Errore caricamento immagine'},502)}
+  }
   if(url.pathname==='/api/battle'&&['GET','POST'].includes(request.method)){
    const id=url.searchParams.get('id');
    if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
    if(!env.DB)return json({error:'Database non disponibile'},503);
    try{
     await env.DB.prepare('CREATE TABLE IF NOT EXISTS token_sizes (token_id TEXT PRIMARY KEY, size INTEGER NOT NULL DEFAULT 1)').run();
-    const battle=await env.DB.prepare('SELECT id,creator_id FROM battles WHERE id=? AND chat_id<>?').bind(id,'demo').first();
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS battle_maps (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,name TEXT NOT NULL,file_id TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
+    const battle=await env.DB.prepare('SELECT id,creator_id,state FROM battles WHERE id=? AND chat_id<>?').bind(id,'demo').first();
     if(!battle)return json({error:'Battaglia non trovata'},404);
     const user=await telegramUser(request,env.TELEGRAM_BOT_TOKEN);
     const userId=user?String(user.id):null;
@@ -86,13 +114,25 @@ export default {
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
      const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
-     return json({tokens:results,members,userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     const maps=(await env.DB.prepare('SELECT id,name FROM battle_maps WHERE battle_id=? ORDER BY created_at DESC').bind(id).all()).results;
+     let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
-    if(!user||!member&&!canMaster)return json({error:'Accesso Telegram richiesto'},403);
+    if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
     if(body?.action==='join'){
      if(!user)return json({error:'Apri la mappa da Telegram'},403);
      if(!member&&!canMaster)await env.DB.prepare('INSERT OR IGNORE INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(id,userId,'player').run();
+     return json({ok:true});
+    }
+    if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
+    if(body?.action==='setMap'){
+     if(!canMaster)return json({error:'Solo i Master possono cambiare mappa'},403);
+     if(body.mapId!==null&&(typeof body.mapId!=='string'||!validId(body.mapId)))return json({error:'Mappa non valida'},400);
+     if(body.mapId){const found=await env.DB.prepare('SELECT id FROM battle_maps WHERE id=? AND battle_id=?').bind(body.mapId,id).first();if(!found)return json({error:'Mappa non trovata'},404)}
+     let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
+     state.activeMap=body.mapId;
+     await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(state),id).run();
      return json({ok:true});
     }
     if(body?.action==='setMemberRole'){
