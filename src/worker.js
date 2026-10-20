@@ -118,7 +118,7 @@ export default {
      const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON current.chat_id=source.chat_id WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,order:state.initiative.order,participants:state.initiative.participants}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>i<(state.initiative.revealed??state.initiative.order.length)?t:{id:t.id,name:t.name,emoji:t.emoji,card:null}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -128,7 +128,18 @@ export default {
      return json({ok:true});
     }
     if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
-    if(['initiativeStart','initiativeNext','initiativeRound','initiativeReset'].includes(body?.action)){
+    if(body?.action==='initiativeRequestRedraw'){
+     const initiative=battleState.initiative;
+     if(!initiative||!initiative.order?.length)return json({error:'Nessuna iniziativa attiva'},409);
+     if(!initiative.participants.some(t=>t.id===body.tokenId))return json({error:'Pedina non partecipante'},400);
+     const token=await env.DB.prepare('SELECT owner_id FROM tokens WHERE battle_id=? AND id=?').bind(id,body.tokenId).first();
+     if(!canMaster&&String(token?.owner_id)!==userId)return json({error:'Questa pedina non è tua'},403);
+     initiative.redrawRequests=initiative.redrawRequests||[];
+     if(!initiative.redrawRequests.includes(body.tokenId))initiative.redrawRequests.push(body.tokenId);
+     await env.DB.prepare('UPDATE battles SET state=? WHERE id=?').bind(JSON.stringify(battleState),id).run();
+     return json({ok:true});
+    }
+    if(['initiativeStart','initiativeNext','initiativeRound','initiativeReset','initiativeReveal','initiativeApproveRedraw','initiativeDenyRedraw'].includes(body?.action)){
      if(!canMaster)return json({error:'Solo i Master possono gestire l’iniziativa'},403);
      const action=body.action;
      let initiative=battleState.initiative||null;
@@ -141,18 +152,33 @@ export default {
       const {results:all}=await env.DB.prepare('SELECT id,name,emoji FROM tokens WHERE battle_id=?').bind(id).all();
       const selected=body.tokenIds.map(tid=>all.find(t=>t.id===tid));
       if(selected.some(t=>!t))return json({error:'Pedina non trovata'},404);
-      initiative={participants:selected,deck:newDeck(),order:[],turn:0,round:0};
+      initiative={participants:selected,deck:newDeck(),order:[],turn:0,round:0,revealed:0,redrawRequests:[]};
      }else if(!initiative)return json({error:'Avvia prima il combattimento'},409);
      if(action==='initiativeRound'||action==='initiativeStart'){
       const count=initiative.participants.length;
-      if(initiative.deck.length<count)initiative.deck=newDeck();
+      if(initiative.reshuffleNext||initiative.deck.length<count){initiative.deck=newDeck();initiative.reshuffleNext=false}
       const drawn=initiative.participants.map(t=>({...t,card:initiative.deck.pop()}));
       initiative.order=drawn.sort((a,b)=>b.card.value-a.card.value);
-      initiative.round=(initiative.round||0)+1;initiative.turn=0;
+      initiative.round=(initiative.round||0)+1;initiative.turn=0;initiative.revealed=0;initiative.redrawRequests=[];
       if(drawn.some(t=>t.card.value>=52))initiative.reshuffleNext=true;
-      if(initiative.reshuffleNext&&action==='initiativeRound'){initiative.deck=newDeck();initiative.reshuffleNext=false}
+
      }
-     if(action==='initiativeNext')initiative.turn=(initiative.turn+1)%initiative.order.length;
+     if(action==='initiativeReveal')initiative.revealed=Math.min(initiative.order.length,(initiative.revealed??initiative.order.length)+1);
+     if(action==='initiativeNext'){if((initiative.revealed??initiative.order.length)<initiative.order.length)return json({error:'Rivela prima tutte le carte'},409);initiative.turn=(initiative.turn+1)%initiative.order.length}
+     if(action==='initiativeApproveRedraw'||action==='initiativeDenyRedraw'){
+      const tid=body.tokenId;
+      if(!initiative.redrawRequests?.includes(tid))return json({error:'Richiesta non trovata'},404);
+      initiative.redrawRequests=initiative.redrawRequests.filter(x=>x!==tid);
+      if(action==='initiativeApproveRedraw'){
+       if(!initiative.deck.length)initiative.deck=newDeck();
+       const entry=initiative.order.find(t=>t.id===tid);
+       if(!entry)return json({error:'Pedina non trovata'},404);
+       entry.card=initiative.deck.pop();
+       if(entry.card.value>=52)initiative.reshuffleNext=true;
+       initiative.order.sort((a,b)=>b.card.value-a.card.value);
+       initiative.turn=0;initiative.revealed=0;
+      }
+     }
      battleState.initiative=initiative;
      await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(battleState),id).run();
      return json({ok:true});
