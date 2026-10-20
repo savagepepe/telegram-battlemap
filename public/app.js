@@ -41,36 +41,37 @@ assignButton.onclick=async()=>{
 };
 
 
-const editor=document.querySelector('#tokenEditor'),choice=document.querySelector('#tokenChoice'),action=document.querySelector('#tokenAction'),valueInput=document.querySelector('#tokenText'),sizeInput=document.querySelector('#tokenSize'),textRow=document.querySelector('#tokenTextRow'),sizeRow=document.querySelector('#tokenSizeRow');
+const editor=document.querySelector('#tokenEditor'),choice=document.querySelector('#tokenChoice'),emojiInput=document.querySelector('#tokenEmoji'),nameInput=document.querySelector('#tokenName'),sizeInput=document.querySelector('#tokenSize'),nameRow=document.querySelector('#tokenNameRow'),sizeRow=document.querySelector('#tokenSizeRow'),deleteButton=document.querySelector('#tokenDelete'),saveButton=document.querySelector('#tokenSave');
 const editable=()=>units.filter(u=>isMaster||String(u.owner_id)===myUserId);
 function refreshEditor(){
- const u=editable().find(u=>u.id===choice.value);
- if(!u)return;
- const a=action.value;
- textRow.hidden=a==='size'||a==='delete';
- sizeRow.hidden=a!=='size';
- if(a==='emoji')valueInput.value=u.emoji;
- if(a==='name')valueInput.value=u.name;
- sizeInput.value=String(tokenSize(u));
+ const u=editable().find(u=>u.id===choice.value);if(!u)return;
+ emojiInput.value=u.emoji;nameInput.value=u.name;sizeInput.value=String(tokenSize(u));
+ nameRow.hidden=!isMaster;sizeRow.hidden=!isMaster;deleteButton.hidden=!isMaster;
 }
 editButton.onclick=()=>{
  if(!editor.hidden){editor.hidden=true;return}
  const available=editable();if(!available.length){alert('Non hai pedine modificabili');return}
  choice.replaceChildren(...available.map(u=>new Option(u.emoji+' '+u.name+' ('+tokenSize(u)+'×'+tokenSize(u)+')',u.id)));
- for(const opt of action.options)opt.hidden=!isMaster&&opt.value!=='emoji';
- action.value='emoji';editor.hidden=false;refreshEditor();
+ editor.hidden=false;refreshEditor();
 };
-choice.onchange=refreshEditor;action.onchange=refreshEditor;
+choice.onchange=refreshEditor;
 document.querySelector('#tokenCancel').onclick=()=>{editor.hidden=true};
-document.querySelector('#tokenSave').onclick=async()=>{
+saveButton.onclick=async()=>{
  const u=editable().find(u=>u.id===choice.value);if(!u)return;
- const a=action.value;
- let body={action:'updateToken',tokenId:u.id};
- if(a==='emoji')body.emoji=valueInput.value;
- else if(a==='name'&&isMaster)body.name=valueInput.value;
- else if(a==='size'&&isMaster)body.size=Number(sizeInput.value);
- else if(a==='delete'&&isMaster){if(!confirm('Eliminare definitivamente '+u.name+'?'))return;body.action='deleteToken'}
- else return;
- try{await battleAction(body);editor.hidden=true}catch(e){alert(e.message)}
+ const body={action:'updateToken',tokenId:u.id};
+ if(emojiInput.value.trim()!==u.emoji)body.emoji=emojiInput.value;
+ if(isMaster){
+  if(nameInput.value.trim()!==u.name)body.name=nameInput.value;
+  if(Number(sizeInput.value)!==tokenSize(u))body.size=Number(sizeInput.value);
+ }
+ if(body.emoji===undefined&&body.name===undefined&&body.size===undefined){editor.hidden=true;return}
+ saveButton.disabled=true;
+ try{await battleAction(body);editor.hidden=true}catch(e){alert(e.message)}finally{saveButton.disabled=false}
+};
+deleteButton.onclick=async()=>{
+ if(!isMaster)return;
+ const u=editable().find(u=>u.id===choice.value);if(!u)return;
+ if(!confirm('Eliminare definitivamente '+u.name+'?'))return;
+ try{await battleAction({action:'deleteToken',tokenId:u.id});editor.hidden=true}catch(e){alert(e.message)}
 };
 window.addEventListener('resize',draw);draw();load();if(shared)setInterval(load,5000);
