@@ -165,6 +165,8 @@ export default {
     const user=await telegramUser(request,env.TELEGRAM_BOT_TOKEN);
     const userId=user?String(user.id):null;
     const member=userId?await env.DB.prepare('SELECT role FROM members WHERE battle_id=? AND user_id=?').bind(id,userId).first():null;
+    await env.DB.prepare('CREATE TABLE IF NOT EXISTS battle_user_names (user_id TEXT PRIMARY KEY,display_name TEXT NOT NULL)').run();
+    if(userId&&user){const display=[user.first_name,user.last_name].filter(Boolean).join(' ').trim()||(user.username?'@'+user.username:'Utente '+userId);const label=display+(user.username&&!display.includes('@'+user.username)?' (@'+user.username+')':'');await env.DB.prepare('INSERT INTO battle_user_names(user_id,display_name) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name').bind(userId,label.slice(0,140)).run();}
     const role=userId===String(battle.creator_id)?'creator':member?.role||'visitor';
     const canMaster=role==='creator'||role==='master';
     let battleState={};try{battleState=JSON.parse(battle.state||'{}')}catch{}
@@ -172,7 +174,7 @@ export default {
     const gridSize=Number.isInteger(battleState.gridSize)&&battleState.gridSize>=6&&battleState.gridSize<=40?battleState.gridSize:12;
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
-     const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
+     const members=canMaster?(await env.DB.prepare('SELECT m.user_id,m.role,n.display_name FROM members m LEFT JOIN battle_user_names n ON n.user_id=m.user_id WHERE m.battle_id=? ORDER BY m.user_id').bind(id).all()).results:[];
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.chat_id='private_'||current.creator_id AND source.creator_id=current.creator_id)) WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
      for(const t of results)t.conditions=(battleState.tokenStates||{})[t.id]||{wounds:0,shaken:false,distracted:false,vulnerable:false};
