@@ -10,7 +10,7 @@
     {
       "binding": "DB",
       "database_name": "battlemap-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+      "database_id": "7b9ea866-bf3d-4f0a-bb70-135ef7a93fd6"
     }
   ]
 }
