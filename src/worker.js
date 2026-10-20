@@ -69,10 +69,28 @@ export default {
     const canMaster=role==='creator'||role==='master';
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT id,name,x,y,emoji,owner_id FROM tokens WHERE battle_id=? ORDER BY id').bind(id).all();
-     return json({tokens:results,role,authenticated:!!user,readonly:!canMaster});
+     const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
+     return json({tokens:results,members,userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user||!member&&!canMaster)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
+    if(body?.action==='join'){
+     if(!user)return json({error:'Apri la mappa da Telegram'},403);
+     if(!member&&!canMaster)await env.DB.prepare('INSERT OR IGNORE INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(id,userId,'player').run();
+     return json({ok:true});
+    }
+    if(body?.action==='assignToken'){
+     if(!canMaster)return json({error:'Solo i Master possono assegnare pedine'},403);
+     if(typeof body.tokenId!=='string'||typeof body.ownerId!=='string')return json({error:'Dati non validi'},400);
+     const token=await env.DB.prepare('SELECT id FROM tokens WHERE battle_id=? AND id=?').bind(id,body.tokenId).first();
+     if(!token)return json({error:'Pedina non trovata'},404);
+     if(body.ownerId!==''){
+      const target=await env.DB.prepare('SELECT user_id FROM members WHERE battle_id=? AND user_id=?').bind(id,body.ownerId).first();
+      if(!target)return json({error:'Giocatore non presente nella battaglia'},404);
+     }
+     await env.DB.prepare('UPDATE tokens SET owner_id=? WHERE id=? AND battle_id=?').bind(body.ownerId||null,body.tokenId,id).run();
+     return json({ok:true});
+    }
     if(body?.action==='createToken'){
      if(!canMaster)return json({error:'Solo i Master possono creare pedine'},403);
      const name=typeof body.name==='string'?body.name.trim():'';
