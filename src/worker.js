@@ -116,7 +116,7 @@ export default {
      const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
      const maps=(await env.DB.prepare('SELECT id,name FROM battle_maps WHERE battle_id=? ORDER BY created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -126,6 +126,15 @@ export default {
      return json({ok:true});
     }
     if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
+    if(body?.action==='setMapView'){
+     if(!canMaster)return json({error:'Solo i Master possono regolare lo sfondo'},403);
+     const v=body.view;
+     if(!v||!['contain','cover','manual'].includes(v.mode)||![v.zoom,v.x,v.y].every(Number.isFinite)||v.zoom<0.5||v.zoom>5||Math.abs(v.x)>2||Math.abs(v.y)>2)return json({error:'Regolazione non valida'},400);
+     let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
+     state.mapView={mode:v.mode,zoom:v.zoom,x:v.x,y:v.y};
+     await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(state),id).run();
+     return json({ok:true});
+    }
     if(body?.action==='setMap'){
      if(!canMaster)return json({error:'Solo i Master possono cambiare mappa'},403);
      if(body.mapId!==null&&(typeof body.mapId!=='string'||!validId(body.mapId)))return json({error:'Mappa non valida'},400);
