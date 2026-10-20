@@ -175,6 +175,22 @@ export default {
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
      const members=canMaster?(await env.DB.prepare('SELECT m.user_id,m.role,n.display_name FROM members m LEFT JOIN battle_user_names n ON n.user_id=m.user_id WHERE m.battle_id=? ORDER BY m.user_id').bind(id).all()).results:[];
+     if(canMaster&&String(battle.chat_id).startsWith('-')){
+      const missing=members.filter(m=>!m.display_name).slice(0,12);
+      await Promise.all(missing.map(async m=>{
+       try{
+        const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/getChatMember?chat_id='+encodeURIComponent(battle.chat_id)+'&user_id='+encodeURIComponent(m.user_id));
+        if(!response.ok)return;
+        const data=await response.json();
+        const tgUser=data?.result?.user;
+        if(!data.ok||!tgUser||String(tgUser.id)!==String(m.user_id))return;
+        const name=[tgUser.first_name,tgUser.last_name].filter(Boolean).join(' ').trim()||(tgUser.username?'@'+tgUser.username:'');
+        if(!name)return;
+        m.display_name=(name+(tgUser.username&&!name.includes('@'+tgUser.username)?' (@'+tgUser.username+')':'')).slice(0,140);
+        await env.DB.prepare('INSERT INTO battle_user_names(user_id,display_name) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name').bind(String(m.user_id),m.display_name).run();
+       }catch{}
+      }));
+     }
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.creator_id=source.creator_id)) WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
      for(const t of results)t.conditions=(battleState.tokenStates||{})[t.id]||{wounds:0,shaken:false,distracted:false,vulnerable:false};
