@@ -40,22 +40,37 @@ assignButton.onclick=async()=>{
  try{await battleAction({action:'assignToken',tokenId:units[index].id,ownerId:n===0?'':players[n-1].user_id})}catch(e){alert(e.message)}
 };
 
-editButton.onclick=async()=>{
- const available=units.filter(u=>isMaster||String(u.owner_id)===myUserId);
- if(!available.length){alert('Non hai pedine modificabili');return}
- const choice=prompt('Scegli la pedina:\n'+available.map((u,i)=>(i+1)+'. '+u.emoji+' '+u.name+' ('+tokenSize(u)+'x'+tokenSize(u)+')').join('\n'));
- if(choice===null)return;
- const i=Number(choice)-1;if(!Number.isInteger(i)||i<0||i>=available.length){alert('Numero non valido');return}
- const u=available[i];
- const action=prompt(isMaster?'Azione: icona, nome, dimensione, elimina':'Azione: icona','icona');
- if(action===null)return;
- const a=action.trim().toLowerCase();
+
+const editor=document.querySelector('#tokenEditor'),choice=document.querySelector('#tokenChoice'),action=document.querySelector('#tokenAction'),valueInput=document.querySelector('#tokenText'),sizeInput=document.querySelector('#tokenSize'),textRow=document.querySelector('#tokenTextRow'),sizeRow=document.querySelector('#tokenSizeRow');
+const editable=()=>units.filter(u=>isMaster||String(u.owner_id)===myUserId);
+function refreshEditor(){
+ const u=editable().find(u=>u.id===choice.value);
+ if(!u)return;
+ const a=action.value;
+ textRow.hidden=a==='size'||a==='delete';
+ sizeRow.hidden=a!=='size';
+ if(a==='emoji')valueInput.value=u.emoji;
+ if(a==='name')valueInput.value=u.name;
+ sizeInput.value=String(tokenSize(u));
+}
+editButton.onclick=()=>{
+ if(!editor.hidden){editor.hidden=true;return}
+ const available=editable();if(!available.length){alert('Non hai pedine modificabili');return}
+ choice.replaceChildren(...available.map(u=>new Option(u.emoji+' '+u.name+' ('+tokenSize(u)+'×'+tokenSize(u)+')',u.id)));
+ for(const opt of action.options)opt.hidden=!isMaster&&opt.value!=='emoji';
+ action.value='emoji';editor.hidden=false;refreshEditor();
+};
+choice.onchange=refreshEditor;action.onchange=refreshEditor;
+document.querySelector('#tokenCancel').onclick=()=>{editor.hidden=true};
+document.querySelector('#tokenSave').onclick=async()=>{
+ const u=editable().find(u=>u.id===choice.value);if(!u)return;
+ const a=action.value;
  let body={action:'updateToken',tokenId:u.id};
- if(a==='icona'){const v=prompt('Nuova icona:',u.emoji);if(v===null)return;body.emoji=v}
- else if(isMaster&&a==='nome'){const v=prompt('Nuovo nome:',u.name);if(v===null)return;body.name=v}
- else if(isMaster&&a==='dimensione'){const v=prompt('Dimensione: 1 o 2',String(tokenSize(u)));if(v===null)return;body.size=Number(v)}
- else if(isMaster&&a==='elimina'){if(!confirm('Eliminare definitivamente '+u.name+'?'))return;body={action:'deleteToken',tokenId:u.id}}
- else{alert('Azione non valida');return}
- try{await battleAction(body)}catch(e){alert(e.message)}
+ if(a==='emoji')body.emoji=valueInput.value;
+ else if(a==='name'&&isMaster)body.name=valueInput.value;
+ else if(a==='size'&&isMaster)body.size=Number(sizeInput.value);
+ else if(a==='delete'&&isMaster){if(!confirm('Eliminare definitivamente '+u.name+'?'))return;body.action='deleteToken'}
+ else return;
+ try{await battleAction(body);editor.hidden=true}catch(e){alert(e.message)}
 };
 window.addEventListener('resize',draw);draw();load();if(shared)setInterval(load,5000);
