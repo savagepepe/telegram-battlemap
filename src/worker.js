@@ -62,10 +62,10 @@ export default {
       env.DB.prepare('INSERT INTO battles (id,chat_id,creator_id,state) VALUES (?,?,?,?)').bind(battleId,chatId,creatorId,'{}'),
       env.DB.prepare('INSERT INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(battleId,creatorId,'master')
      ]);
-     reply='⚔️ Battaglia creata!\n\nID: '+battleId+'\nSei il primo Master.\n\nMappa condivisa (per ora sola visualizzazione):\nhttps://telegram-battlemap.marcpetruzzi.workers.dev/?battle='+battleId;
+     reply='⚔️ Battaglia creata!\n\nID: '+battleId+'\nSei il primo Master.\n\nPer entrare con il tuo account Telegram, apri la chat privata di @RpgBattleMapBot e invia:\n/apri '+battleId;
     }catch(e){reply='⚠️ Non sono riuscito a creare la battaglia. Riprova tra poco.'}
     const battleLink=typeof battleId==='string'?'https://telegram-battlemap.marcpetruzzi.workers.dev/?battle='+battleId:null;
-    const replyMarkup=battleLink?{inline_keyboard:[[{text:'🗺️ Apri battaglia',...(message.chat.type==='private'?{web_app:{url:battleLink}}:{url:battleLink})}]]}:undefined;
+    const replyMarkup=battleLink?{inline_keyboard:[[{text:'🤖 Apri il bot in privato',url:'https://t.me/RpgBattleMapBot'}]]}:undefined;
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:reply,reply_markup:replyMarkup})});
     if(!response.ok){const detail=await response.text().catch(()=> '');console.error('Telegram sendMessage failed',response.status,detail.slice(0,500));return json({ok:true,telegram_delivery_error:true});}
    }
