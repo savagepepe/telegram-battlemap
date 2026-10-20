@@ -118,7 +118,7 @@ export default {
      const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON current.chat_id=source.chat_id WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,order:state.initiative.order,participants:state.initiative.participants}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -128,6 +128,35 @@ export default {
      return json({ok:true});
     }
     if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
+    if(['initiativeStart','initiativeNext','initiativeRound','initiativeReset'].includes(body?.action)){
+     if(!canMaster)return json({error:'Solo i Master possono gestire l’iniziativa'},403);
+     const action=body.action;
+     let initiative=battleState.initiative||null;
+     const ranks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
+     const suits=['♣','♦','♥','♠'];
+     const newDeck=()=>{const cards=[];for(let suit=0;suit<4;suit++)for(let rank=0;rank<13;rank++)cards.push({label:ranks[rank]+suits[suit],value:rank*4+suit});cards.push({label:'🃏 Jolly rosso',value:53},{label:'🃏 Jolly nero',value:52});for(let i=cards.length-1;i>0;i--){const j=crypto.getRandomValues(new Uint32Array(1))[0]%(i+1);[cards[i],cards[j]]=[cards[j],cards[i]]}return cards};
+     if(action==='initiativeReset'){initiative=null}
+     else if(action==='initiativeStart'){
+      if(!Array.isArray(body.tokenIds)||body.tokenIds.length<1||body.tokenIds.length>100||new Set(body.tokenIds).size!==body.tokenIds.length||body.tokenIds.some(x=>typeof x!=='string'))return json({error:'Seleziona le pedine partecipanti'},400);
+      const {results:all}=await env.DB.prepare('SELECT id,name,emoji FROM tokens WHERE battle_id=?').bind(id).all();
+      const selected=body.tokenIds.map(tid=>all.find(t=>t.id===tid));
+      if(selected.some(t=>!t))return json({error:'Pedina non trovata'},404);
+      initiative={participants:selected,deck:newDeck(),order:[],turn:0,round:0};
+     }else if(!initiative)return json({error:'Avvia prima il combattimento'},409);
+     if(action==='initiativeRound'||action==='initiativeStart'){
+      const count=initiative.participants.length;
+      if(initiative.deck.length<count)initiative.deck=newDeck();
+      const drawn=initiative.participants.map(t=>({...t,card:initiative.deck.pop()}));
+      initiative.order=drawn.sort((a,b)=>b.card.value-a.card.value);
+      initiative.round=(initiative.round||0)+1;initiative.turn=0;
+      if(drawn.some(t=>t.card.value>=52))initiative.reshuffleNext=true;
+      if(initiative.reshuffleNext&&action==='initiativeRound'){initiative.deck=newDeck();initiative.reshuffleNext=false}
+     }
+     if(action==='initiativeNext')initiative.turn=(initiative.turn+1)%initiative.order.length;
+     battleState.initiative=initiative;
+     await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(battleState),id).run();
+     return json({ok:true});
+    }
     if(body?.action==='setGridSize'){
      if(!canMaster)return json({error:'Solo i Master possono cambiare la griglia'},403);
      const size=body.gridSize;
