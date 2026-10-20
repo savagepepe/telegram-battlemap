@@ -1,6 +1,24 @@
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const validId=s=>typeof s==='string'&&/^[a-zA-Z0-9_-]{8,80}$/.test(s);
 const defaults=[{id:'hero',x:2,y:2,emoji:'🛡️',name:'Eroe'},{id:'monster',x:6,y:3,emoji:'👹',name:'Mostro'},{id:'mage',x:4,y:7,emoji:'🧙',name:'Mago'}];
+
+async function telegramUser(request,token){
+ const raw=request.headers.get('X-Telegram-Init-Data');
+ if(!raw||raw.length>8192||!token)return null;
+ const params=new URLSearchParams(raw),hash=params.get('hash'),auth=Number(params.get('auth_date'));
+ if(!hash||!/^[0-9a-f]{64}$/i.test(hash)||!Number.isFinite(auth)||Math.abs(Date.now()/1000-auth)>86400)return null;
+ params.delete('hash');
+ const check=[...params.entries()].sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>k+'='+v).join('\n');
+ const enc=new TextEncoder();
+ const key=await crypto.subtle.importKey('raw',enc.encode('WebAppData'),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const secret=await crypto.subtle.sign('HMAC',key,enc.encode(token));
+ const hmac=await crypto.subtle.importKey('raw',secret,{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const signature=new Uint8Array(await crypto.subtle.sign('HMAC',hmac,enc.encode(check)));
+ const hex=Array.from(signature,b=>b.toString(16).padStart(2,'0')).join('');
+ if(hex!==hash.toLowerCase())return null;
+ try{const user=JSON.parse(params.get('user')||'null');return user&&Number.isSafeInteger(user.id)?user:null}catch{return null}
+}
+
 export default {
  async fetch(request,env){
   const url=new URL(request.url);
@@ -35,15 +53,32 @@ export default {
    }
    return json({ok:true});
   }
-  if(url.pathname==='/api/battle'&&request.method==='GET'){
+  if(url.pathname==='/api/battle'&&['GET','POST'].includes(request.method)){
    const id=url.searchParams.get('id');
    if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
    if(!env.DB)return json({error:'Database non disponibile'},503);
    try{
-    const battle=await env.DB.prepare('SELECT id FROM battles WHERE id=? AND chat_id<>?').bind(id,'demo').first();
+    const battle=await env.DB.prepare('SELECT id,creator_id FROM battles WHERE id=? AND chat_id<>?').bind(id,'demo').first();
     if(!battle)return json({error:'Battaglia non trovata'},404);
-    const {results}=await env.DB.prepare('SELECT id,name,x,y,emoji FROM tokens WHERE battle_id=? ORDER BY id').bind(id).all();
-    return json({tokens:results,readonly:true});
+    const user=await telegramUser(request,env.TELEGRAM_BOT_TOKEN);
+    const userId=user?String(user.id):null;
+    const member=userId?await env.DB.prepare('SELECT role FROM members WHERE battle_id=? AND user_id=?').bind(id,userId).first():null;
+    const role=userId===String(battle.creator_id)?'creator':member?.role||'visitor';
+    const canMaster=role==='creator'||role==='master';
+    if(request.method==='GET'){
+     const {results}=await env.DB.prepare('SELECT id,name,x,y,emoji,owner_id FROM tokens WHERE battle_id=? ORDER BY id').bind(id).all();
+     return json({tokens:results,role,authenticated:!!user,readonly:!canMaster});
+    }
+    if(!user||!member&&!canMaster)return json({error:'Accesso Telegram richiesto'},403);
+    const body=await request.json().catch(()=>null);
+    if(!body||typeof body.tokenId!=='string'||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=12||body.y<0||body.y>=12)return json({error:'Movimento non valido'},400);
+    const token=await env.DB.prepare('SELECT id,owner_id FROM tokens WHERE id=? AND battle_id=?').bind(body.tokenId,id).first();
+    if(!token)return json({error:'Pedina non trovata'},404);
+    if(!canMaster&&String(token.owner_id)!==userId)return json({error:'Non puoi spostare questa pedina'},403);
+    const occupied=await env.DB.prepare('SELECT id FROM tokens WHERE battle_id=? AND x=? AND y=? AND id<>?').bind(id,body.x,body.y,body.tokenId).first();
+    if(occupied)return json({error:'Casella occupata'},409);
+    await env.DB.prepare('UPDATE tokens SET x=?,y=? WHERE id=? AND battle_id=?').bind(body.x,body.y,body.tokenId,id).run();
+    return json({ok:true});
    }catch(e){return json({error:'Errore database'},500)}
   }
   if(url.pathname==='/api/demo'&&['GET','POST'].includes(request.method)){
