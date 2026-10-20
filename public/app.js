@@ -104,10 +104,10 @@ function renderInitiative(){
  if(initiative)initiative.order.forEach((t,i)=>{const p=document.createElement('p');p.textContent=(i===initiative.turn?'▶️ ':'')+t.emoji+' '+t.name+' — '+(t.card?.label||'🂠 Carta coperta');if(i===initiative.turn){p.style.fontWeight='bold';p.style.background='#385f71';p.style.padding='8px';p.style.borderRadius='8px'}initiativeList.append(p)});
  const redraw=document.querySelector('#initiativeRedraw');redraw.replaceChildren();if(initiative&&!isMaster){for(const t of units.filter(u=>initiative.participants.some(p=>p.id===u.id)&&String(u.owner_id)===myUserId)){const b=document.createElement('button');b.textContent='🔁 Richiedi ripescaggio: '+t.name;b.onclick=()=>initiativeAction('initiativeRequestRedraw',{tokenId:t.id});redraw.append(b)}}
  if(isMaster){
-  const selected=new Set([...initiativeChoices.querySelectorAll('input:checked')].map(x=>x.value));
+  const selected=new Set([...initiativeChoices.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value));const previousCounts=Object.fromEntries([...initiativeChoices.querySelectorAll('select[data-token]')].map(x=>[x.dataset.token,Number(x.value)]));
   if(!initiativeChoices.children.length&&initiative?.participants)initiative.participants.forEach(t=>selected.add(t.id));
   initiativeChoices.replaceChildren();
-  units.forEach(t=>{const label=document.createElement('label');label.style.display='block';const input=document.createElement('input');input.type='checkbox';input.value=t.id;input.checked=selected.has(t.id);label.append(input,document.createTextNode(' '+t.emoji+' '+t.name));initiativeChoices.append(label)});
+  units.forEach(t=>{const label=document.createElement('label');label.style.display='block';const input=document.createElement('input');input.type='checkbox';input.value=t.id;input.checked=selected.has(t.id);label.append(input,document.createTextNode(' '+t.emoji+' '+t.name+' — carte: '));const count=document.createElement('select');count.dataset.token=t.id;for(let n=1;n<=4;n++)count.append(new Option(String(n),String(n)));count.value=String(previousCounts[t.id]||1);label.append(count);initiativeChoices.append(label)});
   document.querySelector('#initiativeReveal').disabled=!initiative||initiative.revealed>=initiative.order.length;document.querySelector('#initiativeNext').disabled=!initiative||initiative.revealed<initiative.order.length;
   document.querySelector('#initiativeRound').disabled=!initiative;
   document.querySelector('#initiativeReset').disabled=!initiative;
@@ -117,7 +117,7 @@ function renderInitiative(){
  }
 }
 async function initiativeAction(action,extra={}){try{await battleAction({action,...extra})}catch(e){alert(e.message)}}
-document.querySelector('#initiativeStart').onclick=()=>{const tokenIds=[...initiativeChoices.querySelectorAll('input:checked')].map(x=>x.value);if(!tokenIds.length){alert('Seleziona almeno una pedina');return}if(initiative&&!confirm('Ricominciare il combattimento?'))return;initiativeAction('initiativeStart',{tokenIds})};
+document.querySelector('#initiativeStart').onclick=()=>{const tokenIds=[...initiativeChoices.querySelectorAll('input[type=checkbox]:checked')].map(x=>x.value);const cardCounts=Object.fromEntries([...initiativeChoices.querySelectorAll('select[data-token]')].map(x=>[x.dataset.token,Number(x.value)]));if(!tokenIds.length){alert('Seleziona almeno una pedina');return}if(initiative&&!confirm('Ricominciare il combattimento?'))return;initiativeAction('initiativeStart',{tokenIds,cardCounts})};
 document.querySelector('#initiativeReveal').onclick=()=>initiativeAction('initiativeReveal');
 document.querySelector('#initiativeNext').onclick=()=>initiativeAction('initiativeNext');
 document.querySelector('#initiativeRound').onclick=()=>initiativeAction('initiativeRound');
