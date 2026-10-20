@@ -2,7 +2,7 @@ const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control
 const validId=s=>typeof s==='string'&&/^[a-zA-Z0-9_-]{8,80}$/.test(s);
 const validEmoji=s=>typeof s==='string'&&s.trim().length>0&&s.trim().length<=16;
 const footprint=(a,b)=>a.x<b.x+(b.size||1)&&a.x+(a.size||1)>b.x&&a.y<b.y+(b.size||1)&&a.y+(a.size||1)>b.y;
-const canPlace=(tokens,x,y,size,except)=>x>=0&&y>=0&&x+size<=12&&y+size<=12&&!tokens.some(t=>t.id!==except&&footprint({x,y,size},t));
+const canPlace=(tokens,x,y,size,except,grid=12)=>x>=0&&y>=0&&x+size<=grid&&y+size<=grid&&!tokens.some(t=>t.id!==except&&footprint({x,y,size},t));
 const defaults=[{id:'hero',x:2,y:2,emoji:'🛡️',name:'Eroe'},{id:'monster',x:6,y:3,emoji:'👹',name:'Mostro'},{id:'mage',x:4,y:7,emoji:'🧙',name:'Mago'}];
 
 async function telegramUser(request,token){
@@ -111,12 +111,14 @@ export default {
     const member=userId?await env.DB.prepare('SELECT role FROM members WHERE battle_id=? AND user_id=?').bind(id,userId).first():null;
     const role=userId===String(battle.creator_id)?'creator':member?.role||'visitor';
     const canMaster=role==='creator'||role==='master';
+    let battleState={};try{battleState=JSON.parse(battle.state||'{}')}catch{}
+    const gridSize=Number.isInteger(battleState.gridSize)&&battleState.gridSize>=6&&battleState.gridSize<=40?battleState.gridSize:12;
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
      const members=canMaster?(await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? ORDER BY user_id').bind(id).all()).results:[];
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON current.chat_id=source.chat_id WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -126,6 +128,16 @@ export default {
      return json({ok:true});
     }
     if(!member&&!canMaster)return json({error:'Partecipa prima alla battaglia'},403);
+    if(body?.action==='setGridSize'){
+     if(!canMaster)return json({error:'Solo i Master possono cambiare la griglia'},403);
+     const size=body.gridSize;
+     if(!Number.isInteger(size)||size<6||size>40)return json({error:'Scegli una dimensione da 6 a 40'},400);
+     const {results:tokens}=await env.DB.prepare('SELECT t.x,t.y,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=?').bind(id).all();
+     if(tokens.some(t=>t.x+t.size>size||t.y+t.size>size))return json({error:'Ci sono pedine fuori dalla nuova griglia: spostale prima di ridurla'},409);
+     battleState.gridSize=size;
+     await env.DB.prepare('UPDATE battles SET state=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(JSON.stringify(battleState),id).run();
+     return json({ok:true});
+    }
     if(body?.action==='setMapView'){
      if(!canMaster)return json({error:'Solo i Master possono regolare lo sfondo'},403);
      const v=body.view;
@@ -189,7 +201,7 @@ export default {
       if(!canMaster)return json({error:'Solo il Master può cambiare la dimensione'},403);
       if(![1,2,3,4].includes(body.size))return json({error:'Dimensione non valida'},400);
       const {results:others}=await env.DB.prepare('SELECT t.id,t.x,t.y,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=?').bind(id).all();
-      if(!canPlace(others,token.x,token.y,body.size,token.id))return json({error:'Spazio insufficiente per la dimensione scelta'},409);
+      if(!canPlace(others,token.x,token.y,body.size,token.id,gridSize))return json({error:'Spazio insufficiente per la dimensione scelta'},409);
       await env.DB.prepare('INSERT INTO token_sizes(token_id,size) VALUES(?,?) ON CONFLICT(token_id) DO UPDATE SET size=excluded.size').bind(token.id,body.size).run();
      }
      if(updates.length)await env.DB.prepare('UPDATE tokens SET '+updates.join(',')+' WHERE id=? AND battle_id=?').bind(...values,token.id,id).run();
@@ -203,19 +215,19 @@ export default {
      const size=[1,2,3,4].includes(body.size)?body.size:1;
      const {results:occupied}=await env.DB.prepare('SELECT t.id,t.x,t.y,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=?').bind(id).all();
      let cell=null;
-     for(let y=0;y<=12-size&&!cell;y++)for(let x=0;x<=12-size;x++)if(canPlace(occupied,x,y,size)){cell={x,y};break}
+     for(let y=0;y<=gridSize-size&&!cell;y++)for(let x=0;x<=gridSize-size;x++)if(canPlace(occupied,x,y,size,undefined,gridSize)){cell={x,y};break}
      if(!cell)return json({error:'Non c’è spazio libero per la pedina'},409);
      const tokenId='token_'+crypto.randomUUID().replaceAll('-','');
      await env.DB.batch([env.DB.prepare('INSERT INTO tokens (id,battle_id,owner_id,name,x,y,emoji) VALUES (?,?,?,?,?,?,?)').bind(tokenId,id,null,name,cell.x,cell.y,emoji),env.DB.prepare('INSERT INTO token_sizes(token_id,size) VALUES(?,?)').bind(tokenId,size)]);
      return json({ok:true,tokenId});
     }
-    if(!body||typeof body.tokenId!=='string'||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=12||body.y<0||body.y>=12)return json({error:'Movimento non valido'},400);
+    if(!body||typeof body.tokenId!=='string'||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=gridSize||body.y<0||body.y>=gridSize)return json({error:'Movimento non valido'},400);
     const token=await env.DB.prepare('SELECT id,owner_id FROM tokens WHERE id=? AND battle_id=?').bind(body.tokenId,id).first();
     if(!token)return json({error:'Pedina non trovata'},404);
     if(!canMaster&&String(token.owner_id)!==userId)return json({error:'Non puoi spostare questa pedina'},403);
     const {results:occupied}=await env.DB.prepare('SELECT t.id,t.x,t.y,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=?').bind(id).all();
     const moving=occupied.find(t=>t.id===body.tokenId);
-    if(!moving||!canPlace(occupied,body.x,body.y,moving.size,body.tokenId))return json({error:'Casella occupata o fuori griglia'},409);
+    if(!moving||!canPlace(occupied,body.x,body.y,moving.size,body.tokenId,gridSize))return json({error:'Casella occupata o fuori griglia'},409);
     await env.DB.prepare('UPDATE tokens SET x=?,y=? WHERE id=? AND battle_id=?').bind(body.x,body.y,body.tokenId,id).run();
     return json({ok:true});
    }catch(e){return json({error:'Errore database'},500)}
