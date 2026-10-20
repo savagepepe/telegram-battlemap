@@ -33,9 +33,9 @@ export default {
    if(!received||received!==env.TELEGRAM_WEBHOOK_SECRET)return json({error:'Non autorizzato'},403);
    const update=await request.json().catch(()=>null);
    const message=update?.message;
-   if(message?.chat?.id&&message?.from?.id&&Array.isArray(message.photo)&&/^\\/mappa(?:@\\w+)?(?:\\s|$)/i.test(message.caption||'')){
+   if(message?.chat?.id&&message?.from?.id&&Array.isArray(message.photo)&&/^\/mappa(?:@\w+)?(?:\s|$)/i.test(message.caption||'')){
     const chatId=String(message.chat.id),userId=String(message.from.id);
-    const name=(message.caption||'').replace(/^\\/mappa(?:@\\w+)?/i,'').trim().slice(0,60)||'Mappa';
+    const name=(message.caption||'').replace(/^\/mappa(?:@\w+)?/i,'').trim().slice(0,60)||'Mappa';
     try{
      await env.DB.prepare('CREATE TABLE IF NOT EXISTS battle_maps (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,name TEXT NOT NULL,file_id TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
      const battle=await env.DB.prepare('SELECT b.id FROM battles b LEFT JOIN members m ON m.battle_id=b.id AND m.user_id=? WHERE b.chat_id=? AND (b.creator_id=? OR m.role=?) ORDER BY b.updated_at DESC LIMIT 1').bind(userId,chatId,userId,'master').first();
@@ -52,7 +52,7 @@ export default {
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     if(!response.ok)return json({error:'Invio Telegram non riuscito'},502);
    }
-   if(message?.chat?.id && message?.from?.id && typeof message.text==='string' && message.text.trim().split(/\\s+/)[0].split('@')[0].toLowerCase()==='/nuovabattaglia'){
+   if(message?.chat?.id && message?.from?.id && typeof message.text==='string' && message.text.trim().split(/\s+/)[0].split('@')[0].toLowerCase()==='/nuovabattaglia'){
     const chatId=String(message.chat.id),creatorId=String(message.from.id);
     let reply,battleId;
     try{
@@ -137,7 +137,7 @@ export default {
     }
     if(body?.action==='setMemberRole'){
      if(role!=='creator')return json({error:'Solo il creatore può gestire i Master'},403);
-     if(typeof body.targetId!=='string'||!/^\\d{1,20}$/.test(body.targetId)||!['master','player'].includes(body.newRole))return json({error:'Dati non validi'},400);
+     if(typeof body.targetId!=='string'||!/^\d{1,20}$/.test(body.targetId)||!['master','player'].includes(body.newRole))return json({error:'Dati non validi'},400);
      if(body.targetId===String(battle.creator_id))return json({error:'Il creatore non può perdere il ruolo'},403);
      const target=await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? AND user_id=?').bind(id,body.targetId).first();
      if(!target)return json({error:'Partecipante non trovato'},404);
