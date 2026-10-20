@@ -90,39 +90,12 @@ export default {
    }
    return json({ok:true});
   }
-  if(url.pathname==='/api/upload-map'&&request.method==='POST'){
-   if(!env.DB)return json({error:'Database non disponibile'},503);
-   const user=await telegramUser(request,env.TELEGRAM_BOT_TOKEN);
-   if(!user)return json({error:'Accesso Telegram richiesto'},403);
-   const id=url.searchParams.get('battle');
-   if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
-   const b=await env.DB.prepare('SELECT creator_id FROM battles WHERE id=?').bind(id).first();
-   if(!b)return json({error:'Battaglia non trovata'},404);
-   const uid=String(user.id);
-   const member=await env.DB.prepare('SELECT role FROM members WHERE battle_id=? AND user_id=?').bind(id,uid).first();
-   if(String(b.creator_id)!==uid&&member?.role!=='master')return json({error:'Solo il Master può caricare sfondi'},403);
-   const form=await request.formData();
-   const file=form.get('image');
-   if(!file||typeof file.arrayBuffer!=='function'||!String(file.type).startsWith('image/'))return json({error:'Seleziona una immagine'},400);
-   if(file.size>1500000)return json({error:'Immagine troppo grande (max 1,5 MB)'},413);
-   const bytes=new Uint8Array(await file.arrayBuffer());
-   const name=String(form.get('name')||file.name||'Sfondo').slice(0,60);
-   const mapId='map_'+crypto.randomUUID().replaceAll('-','');
-   await env.DB.prepare('CREATE TABLE IF NOT EXISTS map_uploads (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,content_type TEXT NOT NULL,data BLOB NOT NULL)').run();
-   await env.DB.prepare('CREATE TABLE IF NOT EXISTS battle_maps (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,name TEXT NOT NULL,file_id TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
-   await env.DB.batch([
-    env.DB.prepare('INSERT INTO map_uploads(id,battle_id,content_type,data) VALUES(?,?,?,?)').bind(mapId,id,'image/jpeg',bytes),
-    env.DB.prepare('INSERT INTO battle_maps(id,battle_id,name,file_id) VALUES(?,?,?,?)').bind(mapId,id,name,'upload:'+mapId)
-   ]);
-   return json({ok:true,mapId});
-  }
   if(url.pathname==='/api/map-image'){
    const id=url.searchParams.get('battle'),mapId=url.searchParams.get('map');
    if(!validId(id)||!validId(mapId)||!env.DB||!env.TELEGRAM_BOT_TOKEN)return json({error:'Mappa non valida'},400);
    try{
     const map=await env.DB.prepare('SELECT bm.file_id FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR current.id=source.id) WHERE bm.id=? AND current.id=?').bind(mapId,id).first();
     if(!map)return json({error:'Immagine non trovata'},404);
-    if(map.file_id.startsWith('upload:')){const uploaded=await env.DB.prepare('SELECT content_type,data FROM map_uploads WHERE id=? AND battle_id=?').bind(mapId,id).first();if(!uploaded)return json({error:'Immagine non trovata'},404);return new Response(uploaded.data,{headers:{'Content-Type':uploaded.content_type,'Cache-Control':'private, max-age=60'}})}
     const r=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/getFile?file_id='+encodeURIComponent(map.file_id));
     const data=await r.json();
     if(!data.ok||!data.result?.file_path)return json({error:'File Telegram non disponibile'},502);
@@ -153,13 +126,11 @@ export default {
      if(!validId(id)||!id.startsWith('battle_'))return json({error:'Battaglia non valida'},400);
      const owned=await env.DB.prepare('SELECT id FROM battles WHERE id=? AND creator_id=?').bind(id,uid).first();
      if(!owned)return json({error:'Solo il creatore può eliminare la battaglia'},403);
-     await env.DB.prepare('CREATE TABLE IF NOT EXISTS map_uploads (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,content_type TEXT NOT NULL,data BLOB NOT NULL)').run();
      await env.DB.batch([
       env.DB.prepare('DELETE FROM requests WHERE battle_id=?').bind(id),
       env.DB.prepare('DELETE FROM token_sizes WHERE token_id IN (SELECT id FROM tokens WHERE battle_id=?)').bind(id),
       env.DB.prepare('DELETE FROM tokens WHERE battle_id=?').bind(id),
       env.DB.prepare('DELETE FROM battle_maps WHERE battle_id=?').bind(id),
-      env.DB.prepare('DELETE FROM map_uploads WHERE battle_id=?').bind(id),
       env.DB.prepare('DELETE FROM members WHERE battle_id=?').bind(id),
       env.DB.prepare('DELETE FROM battles WHERE id=? AND creator_id=?').bind(id,uid)
      ]);
