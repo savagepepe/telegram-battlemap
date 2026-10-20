@@ -129,7 +129,7 @@ export default {
      }
      if(body.size!==undefined){
       if(!canMaster)return json({error:'Solo il Master può cambiare la dimensione'},403);
-      if(![1,2].includes(body.size))return json({error:'Dimensione non valida'},400);
+      if(![1,2,3,4].includes(body.size))return json({error:'Dimensione non valida'},400);
       const {results:others}=await env.DB.prepare('SELECT t.id,t.x,t.y,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=?').bind(id).all();
       if(!canPlace(others,token.x,token.y,body.size,token.id))return json({error:'Spazio insufficiente per la dimensione scelta'},409);
       await env.DB.prepare('INSERT INTO token_sizes(token_id,size) VALUES(?,?) ON CONFLICT(token_id) DO UPDATE SET size=excluded.size').bind(token.id,body.size).run();
@@ -142,7 +142,7 @@ export default {
      const name=typeof body.name==='string'?body.name.trim():'';
      const emoji=typeof body.emoji==='string'?body.emoji.trim():'';
      if(!name||name.length>40||!emoji||emoji.length>16)return json({error:'Dati pedina non validi'},400);
-     const size=[1,2].includes(body.size)?body.size:1;
+     const size=[1,2,3,4].includes(body.size)?body.size:1;
      const {results:occupied}=await env.DB.prepare('SELECT t.id,t.x,t.y,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=?').bind(id).all();
      let cell=null;
      for(let y=0;y<=12-size&&!cell;y++)for(let x=0;x<=12-size;x++)if(canPlace(occupied,x,y,size)){cell={x,y};break}
