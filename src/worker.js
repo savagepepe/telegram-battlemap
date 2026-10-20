@@ -95,6 +95,15 @@ export default {
      if(!member&&!canMaster)await env.DB.prepare('INSERT OR IGNORE INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(id,userId,'player').run();
      return json({ok:true});
     }
+    if(body?.action==='setMemberRole'){
+     if(role!=='creator')return json({error:'Solo il creatore può gestire i Master'},403);
+     if(typeof body.targetId!=='string'||!/^\\d{1,20}$/.test(body.targetId)||!['master','player'].includes(body.newRole))return json({error:'Dati non validi'},400);
+     if(body.targetId===String(battle.creator_id))return json({error:'Il creatore non può perdere il ruolo'},403);
+     const target=await env.DB.prepare('SELECT user_id,role FROM members WHERE battle_id=? AND user_id=?').bind(id,body.targetId).first();
+     if(!target)return json({error:'Partecipante non trovato'},404);
+     await env.DB.prepare('UPDATE members SET role=? WHERE battle_id=? AND user_id=?').bind(body.newRole,id,body.targetId).run();
+     return json({ok:true});
+    }
     if(body?.action==='assignToken'){
      if(!canMaster)return json({error:'Solo i Master possono assegnare pedine'},403);
      if(typeof body.tokenId!=='string'||typeof body.ownerId!=='string')return json({error:'Dati non validi'},400);
