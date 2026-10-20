@@ -46,9 +46,9 @@ export default {
      }
     }catch(e){return json({error:'Errore salvataggio riferimento mappa'},500)}
    }
-   if(message?.chat?.id && typeof message.text==='string' && message.text.trim().split(/\\s+/)[0].split('@')[0].toLowerCase()==='/start'){
+   if(message?.chat?.id && typeof message.text==='string' && message.text.trim().split(/\s+/)[0].split('@')[0].toLowerCase()==='/start'){
     const chatId=message.chat.id;
-    const requestedId=message.chat.type==='private'?message.text.trim().split(/\\s+/)[1]:null;
+    const requestedId=message.chat.type==='private'?message.text.trim().split(/\s+/)[1]:null;
     let payload;
     if(requestedId&&validId(requestedId)&&requestedId.startsWith('battle_')){
      const battle=env.DB?await env.DB.prepare('SELECT id FROM battles WHERE id=?').bind(requestedId).first():null;
