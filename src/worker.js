@@ -46,11 +46,18 @@ export default {
      }
     }catch(e){return json({error:'Errore salvataggio riferimento mappa'},500)}
    }
-   if(message?.chat?.id && typeof message.text === 'string' && message.text.split(' ')[0].split('@')[0] === '/start'){
+   if(message?.chat?.id && typeof message.text==='string' && message.text.trim().split(/\\s+/)[0].split('@')[0].toLowerCase()==='/start'){
     const chatId=message.chat.id;
-    const payload={chat_id:chatId,text:'⚔️ Benvenuto in RPG Battle Map! Apri la mappa dimostrativa con il pulsante qui sotto.',reply_markup:{inline_keyboard:[[{text:'🗺️ Apri Battle Map',web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/'}}]]}};
+    const requestedId=message.chat.type==='private'?message.text.trim().split(/\\s+/)[1]:null;
+    let payload;
+    if(requestedId&&validId(requestedId)&&requestedId.startsWith('battle_')){
+     const battle=env.DB?await env.DB.prepare('SELECT id FROM battles WHERE id=?').bind(requestedId).first():null;
+     payload=battle?{chat_id:chatId,text:'⚔️ Battaglia pronta! Premi per entrare nella mappa.',reply_markup:{inline_keyboard:[[{text:'🗺️ Entra nella battaglia',web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/?battle='+requestedId}}]]}}:{chat_id:chatId,text:'Battaglia non trovata.'};
+    }else{
+     payload={chat_id:chatId,text:'⚔️ Benvenuto in RPG Battle Map! Apri la mappa dimostrativa con il pulsante qui sotto.',reply_markup:{inline_keyboard:[[{text:'🗺️ Apri Battle Map',...(message.chat.type==='private'?{web_app:{url:'https://telegram-battlemap.marcpetruzzi.workers.dev/'}}:{url:'https://t.me/RpgBattleMapBot'})}]]}};
+    }
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    if(!response.ok){const detail=await response.text().catch(()=> '');console.error('Telegram sendMessage failed',response.status,detail.slice(0,500));return json({ok:true,telegram_delivery_error:true});}
+    if(!response.ok){const detail=await response.text().catch(()=> '');console.error('Telegram sendMessage failed',response.status,detail.slice(0,500));}
    }
    if(message?.chat?.id && message?.from?.id && typeof message.text==='string' && message.text.trim().split(/\s+/)[0].split('@')[0].toLowerCase()==='/nuovabattaglia'){
     const chatId=String(message.chat.id),creatorId=String(message.from.id);
@@ -62,10 +69,10 @@ export default {
       env.DB.prepare('INSERT INTO battles (id,chat_id,creator_id,state) VALUES (?,?,?,?)').bind(battleId,chatId,creatorId,'{}'),
       env.DB.prepare('INSERT INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(battleId,creatorId,'master')
      ]);
-     reply='⚔️ Battaglia creata!\n\nID: '+battleId+'\nSei il primo Master.\n\nPer entrare con il tuo account Telegram, apri la chat privata di @RpgBattleMapBot e invia:\n/apri '+battleId;
+     reply='⚔️ Battaglia creata!\n\nID: '+battleId+'\nSei il primo Master.\n\nPremi il pulsante qui sotto per entrare nella mappa.';
     }catch(e){reply='⚠️ Non sono riuscito a creare la battaglia. Riprova tra poco.'}
     const battleLink=typeof battleId==='string'?'https://telegram-battlemap.marcpetruzzi.workers.dev/?battle='+battleId:null;
-    const replyMarkup=battleLink?{inline_keyboard:[[{text:'🤖 Apri il bot in privato',url:'https://t.me/RpgBattleMapBot'}]]}:undefined;
+    const replyMarkup=battleLink?{inline_keyboard:[[{text:'🗺️ Entra nella battaglia',url:'https://t.me/RpgBattleMapBot?start='+battleId}]]}:undefined;
     const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:reply,reply_markup:replyMarkup})});
     if(!response.ok){const detail=await response.text().catch(()=> '');console.error('Telegram sendMessage failed',response.status,detail.slice(0,500));return json({ok:true,telegram_delivery_error:true});}
    }
