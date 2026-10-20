@@ -38,11 +38,15 @@ export default {
     const name=(message.caption||'').replace(/^\/mappa(?:@\w+)?/i,'').trim().slice(0,60)||'Mappa';
     try{
      await env.DB.prepare('CREATE TABLE IF NOT EXISTS battle_maps (id TEXT PRIMARY KEY,battle_id TEXT NOT NULL,name TEXT NOT NULL,file_id TEXT NOT NULL,created_at TEXT DEFAULT CURRENT_TIMESTAMP)').run();
-     const battle=await env.DB.prepare('SELECT b.id FROM battles b LEFT JOIN members m ON m.battle_id=b.id AND m.user_id=? WHERE b.chat_id=? AND (b.creator_id=? OR m.role=?) ORDER BY b.updated_at DESC LIMIT 1').bind(userId,chatId,userId,'master').first();
+     const battle=message.chat.type==='private'
+      ?await env.DB.prepare("SELECT id FROM battles WHERE creator_id=? AND chat_id=? ORDER BY updated_at DESC LIMIT 1").bind(userId,'private_'+userId).first()
+      :await env.DB.prepare('SELECT b.id FROM battles b LEFT JOIN members m ON m.battle_id=b.id AND m.user_id=? WHERE b.chat_id=? AND (b.creator_id=? OR m.role=?) ORDER BY b.updated_at DESC LIMIT 1').bind(userId,chatId,userId,'master').first();
      if(battle){
       const photo=message.photo[message.photo.length-1];
       await env.DB.prepare('INSERT INTO battle_maps(id,battle_id,name,file_id) VALUES(?,?,?,?)').bind('map_'+crypto.randomUUID().replaceAll('-',''),battle.id,name,photo.file_id).run();
       await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:'🗺️ Mappa «'+name+'» aggiunta. Apri Battle Map per selezionarla.'})});
+     }else if(message.chat.type==='private'){
+      await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chat_id:message.chat.id,text:'⚠️ Crea prima una battaglia privata dalla Mini App, poi invia di nuovo la foto con /mappa Nome.'})});
      }
     }catch(e){return json({error:'Errore salvataggio riferimento mappa'},500)}
    }
