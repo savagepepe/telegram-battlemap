@@ -80,7 +80,7 @@ masterButton.onclick=()=>{
  if(!masterPanel.hidden){masterPanel.hidden=true;return}
  const candidates=members.filter(m=>String(m.user_id)!==myUserId);
  if(!candidates.length){alert('Nessun altro partecipante. I giocatori devono prima entrare nella battaglia.');return}
- masterMember.replaceChildren(...candidates.map(m=>new Option('Utente Telegram '+m.user_id+' — '+(m.role==='master'?'Master':'Giocatore'),m.user_id)));
+ masterMember.replaceChildren(...candidates.map(m=>new Option((m.display_name||'Utente Telegram '+m.user_id)+' — '+(m.role==='master'?'Master':'Giocatore'),m.user_id)));
  masterPanel.hidden=false;masterMember.onchange();
 };
 masterMember.onchange=()=>{const m=members.find(m=>String(m.user_id)===masterMember.value);if(m)masterRole.value=m.role==='master'?'master':'player'};
@@ -89,7 +89,7 @@ masterSave.onclick=async()=>{
  if(!isCreator)return;
  const m=members.find(m=>String(m.user_id)===masterMember.value);if(!m)return;
  if(m.role===masterRole.value){masterPanel.hidden=true;return}
- if(!confirm('Impostare '+masterMember.value+' come '+(masterRole.value==='master'?'Master':'Giocatore')+'?'))return;
+ if(!confirm('Impostare '+(m.display_name||'Utente Telegram '+m.user_id)+' come '+(masterRole.value==='master'?'Master':'Giocatore')+'?'))return;
  masterSave.disabled=true;
  try{await battleAction({action:'setMemberRole',targetId:masterMember.value,newRole:masterRole.value});masterPanel.hidden=true}catch(e){alert(e.message)}finally{masterSave.disabled=false}
 };
