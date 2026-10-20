@@ -64,13 +64,13 @@ export default {
     if(!response.ok){const detail=await response.text().catch(()=> '');console.error('Telegram sendMessage failed',response.status,detail.slice(0,500));}
    }
    if(message?.chat?.id && message?.from?.id && typeof message.text==='string' && message.text.trim().split(/\s+/)[0].split('@')[0].toLowerCase()==='/nuovabattaglia'){
-    const chatId=String(message.chat.id),creatorId=String(message.from.id);
+    const creatorId=String(message.from.id),chatId=message.chat.type==='private'?'private_'+creatorId:String(message.chat.id);
     let reply,battleId;
     try{
      if(!env.DB)throw Error('Database non disponibile');
      battleId='battle_'+crypto.randomUUID().replaceAll('-','');
      await env.DB.batch([
-      env.DB.prepare('INSERT INTO battles (id,chat_id,creator_id,state) VALUES (?,?,?,?)').bind(battleId,chatId,creatorId,'{}'),
+      env.DB.prepare('INSERT INTO battles (id,chat_id,creator_id,state) VALUES (?,?,?,?)').bind(battleId,chatId,creatorId,JSON.stringify({published:true})),
       env.DB.prepare('INSERT INTO members (battle_id,user_id,role) VALUES (?,?,?)').bind(battleId,creatorId,'master')
      ]);
      reply='⚔️ Battaglia creata!\n\nID: '+battleId+'\nSei il primo Master.\n\nPremi il pulsante qui sotto per entrare nella mappa.';
@@ -115,14 +115,14 @@ export default {
    const uid=String(user.id);
    if(request.method==='GET'){
     const {results}=await env.DB.prepare("SELECT id,state,updated_at,chat_id FROM battles WHERE creator_id=? AND chat_id<>? ORDER BY updated_at DESC LIMIT 100").bind(uid,'demo').all();
-    return json({battles:results.map(b=>{let state={};try{state=JSON.parse(b.state||'{}')}catch{}return{id:b.id,name:state.name||'Battaglia',private:b.chat_id==='private_'+uid&&!state.published,updated_at:b.updated_at}})});
+    return json({battles:results.map(b=>{let state={};try{state=JSON.parse(b.state||'{}')}catch{}return{id:b.id,name:state.name||'Battaglia',updated_at:b.updated_at}})});
    }
    if(request.method==='POST'){
     const body=await request.json().catch(()=>null);
     if(body?.action==='create'){
      const name=String(body.name||'Nuova battaglia').trim().slice(0,60)||'Nuova battaglia';
      const id='battle_'+crypto.randomUUID().replaceAll('-','');
-     await env.DB.batch([env.DB.prepare('INSERT INTO battles(id,chat_id,creator_id,state) VALUES(?,?,?,?)').bind(id,'private_'+uid,uid,JSON.stringify({name,published:false})),env.DB.prepare('INSERT INTO members(battle_id,user_id,role) VALUES(?,?,?)').bind(id,uid,'master')]);
+     await env.DB.batch([env.DB.prepare('INSERT INTO battles(id,chat_id,creator_id,state) VALUES(?,?,?,?)').bind(id,'private_'+uid,uid,JSON.stringify({name,published:true})),env.DB.prepare('INSERT INTO members(battle_id,user_id,role) VALUES(?,?,?)').bind(id,uid,'master')]);
      return json({ok:true,id});
     }
     if(body?.action==='delete'){
@@ -168,7 +168,7 @@ export default {
     const role=userId===String(battle.creator_id)?'creator':member?.role||'visitor';
     const canMaster=role==='creator'||role==='master';
     let battleState={};try{battleState=JSON.parse(battle.state||'{}')}catch{}
-    if(battle.chat_id==='private_'+String(battle.creator_id)&&!battleState.published&&!canMaster)return json({error:'Battaglia privata: attendi la condivisione del Master'},403);
+    
     const gridSize=Number.isInteger(battleState.gridSize)&&battleState.gridSize>=6&&battleState.gridSize<=40?battleState.gridSize:12;
     if(request.method==='GET'){
      const {results}=await env.DB.prepare('SELECT t.id,t.name,t.x,t.y,t.emoji,t.owner_id,COALESCE(s.size,1) AS size FROM tokens t LEFT JOIN token_sizes s ON s.token_id=t.id WHERE t.battle_id=? ORDER BY t.id').bind(id).all();
