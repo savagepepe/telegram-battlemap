@@ -73,6 +73,17 @@ export default {
     }
     if(!user||!member&&!canMaster)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
+    if(body?.action==='createToken'){
+     if(!canMaster)return json({error:'Solo i Master possono creare pedine'},403);
+     const name=typeof body.name==='string'?body.name.trim():'';
+     const emoji=typeof body.emoji==='string'?body.emoji.trim():'';
+     if(!name||name.length>40||!emoji||emoji.length>16||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=12||body.y<0||body.y>=12)return json({error:'Dati pedina non validi'},400);
+     const occupied=await env.DB.prepare('SELECT id FROM tokens WHERE battle_id=? AND x=? AND y=?').bind(id,body.x,body.y).first();
+     if(occupied)return json({error:'Casella occupata'},409);
+     const tokenId='token_'+crypto.randomUUID().replaceAll('-','');
+     await env.DB.prepare('INSERT INTO tokens (id,battle_id,owner_id,name,x,y,emoji) VALUES (?,?,?,?,?,?,?)').bind(tokenId,id,null,name,body.x,body.y,emoji).run();
+     return json({ok:true,tokenId});
+    }
     if(!body||typeof body.tokenId!=='string'||!Number.isInteger(body.x)||!Number.isInteger(body.y)||body.x<0||body.x>=12||body.y<0||body.y>=12)return json({error:'Movimento non valido'},400);
     const token=await env.DB.prepare('SELECT id,owner_id FROM tokens WHERE id=? AND battle_id=?').bind(body.tokenId,id).first();
     if(!token)return json({error:'Pedina non trovata'},404);
