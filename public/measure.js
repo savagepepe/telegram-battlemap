@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const canvas=document.querySelector('#map'),button=document.querySelector('#measureButton'),clear=document.querySelector('#measureClear'),result=document.querySelector('#measureResult');
-const layer=document.createElement('canvas');layer.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2';
+const layer=document.createElement('canvas');layer.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;background:transparent;padding:0;margin:0;border-radius:0;box-sizing:border-box';
 const parent=canvas.parentElement;parent.style.position='relative';parent.append(layer);
 const ctx=layer.getContext('2d');let active=false,start=null,end=null,grid=12,down=null;
 const battle=new URLSearchParams(location.search).get('battle');
