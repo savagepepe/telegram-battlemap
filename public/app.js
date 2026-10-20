@@ -13,12 +13,8 @@ addButton.onclick=async()=>{
  if(!shared||!canMove)return;
  const name=prompt('Nome della pedina (massimo 40 caratteri):','Nuova pedina');if(name===null)return;
  const emoji=prompt('Icona della pedina:','⚔️');if(emoji===null)return;
- const xRaw=prompt('Colonna da 1 a 12:','1');if(xRaw===null)return;
- const yRaw=prompt('Riga da 1 a 12:','1');if(yRaw===null)return;
- const x=Number(xRaw)-1,y=Number(yRaw)-1;
- if(!Number.isInteger(x)||!Number.isInteger(y)||x<0||x>=N||y<0||y>=N){alert('Scegli una riga e una colonna tra 1 e 12');return}
  try{
-  const r=await fetch('/api/battle?id='+encodeURIComponent(sharedId),{method:'POST',headers:{'Content-Type':'application/json','X-Telegram-Init-Data':initData},body:JSON.stringify({action:'createToken',name,emoji,x,y})});
+  const r=await fetch('/api/battle?id='+encodeURIComponent(sharedId),{method:'POST',headers:{'Content-Type':'application/json','X-Telegram-Init-Data':initData},body:JSON.stringify({action:'createToken',name,emoji})});
   const data=await r.json();if(!r.ok)throw Error(data.error||'Errore');
   await load();
  }catch(e){alert('Impossibile aggiungere pedina: '+e.message)}
