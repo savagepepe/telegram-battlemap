@@ -194,7 +194,14 @@ export default {
      const maps=(await env.DB.prepare('SELECT DISTINCT bm.id,bm.name FROM battle_maps bm JOIN battles source ON source.id=bm.battle_id JOIN battles current ON (current.chat_id=source.chat_id OR (current.creator_id=source.creator_id)) WHERE current.id=? ORDER BY bm.created_at DESC').bind(id).all()).results;
      let state={};try{state=JSON.parse(battle.state||'{}')}catch{}
      for(const t of results)t.conditions=(battleState.tokenStates||{})[t.id]||{wounds:0,shaken:false,distracted:false,vulnerable:false};
-     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,areas:(state.areas||[]).filter(a=>a.status==='approved'||(user&&(canMaster||a.owner===userId))),initiative:state.initiative?{round:state.initiative.round,turn:state.initiative.turn,revealed:state.initiative.revealed??state.initiative.order.length,order:state.initiative.order.map((t,i)=>(canMaster||i<(state.initiative.revealed??state.initiative.order.length)||results.some(u=>u.id===t.id&&String(u.owner_id)===userId&&!!user))?t:{id:t.id,name:t.name,emoji:t.emoji,card:null,cards:[]}),participants:state.initiative.participants,redrawRequests:canMaster?(state.initiative.redrawRequests||[]):[]}:null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
+     return json({tokens:results,members,maps,activeMap:state.activeMap||null,gridSize,areas:(state.areas||[]).filter(a=>a.status==='approved'||(user&&(canMaster||a.owner===userId))),initiative:state.initiative?(()=>{
+       const ini=state.initiative;
+       const revealed=ini.revealed??ini.order.length;
+       const shown=canMaster?ini.order:ini.order.slice(0,revealed);
+       const own=canMaster?[]:ini.order.slice(revealed).filter(t=>results.some(u=>u.id===t.id&&String(u.owner_id)===userId&&!!user));
+       const order=[...shown,...own];
+       return {round:ini.round,turn:canMaster||revealed>=ini.order.length?ini.turn:-1,revealed:canMaster?revealed:shown.length,order,remaining:canMaster?0:ini.order.length-revealed,participants:ini.participants,redrawRequests:canMaster?(ini.redrawRequests||[]):[]};
+      })():null,mapView:state.mapView||{mode:'contain',zoom:1,x:0,y:0},userId,role,authenticated:!!user,readonly:!canMaster&&role!=='player'});
     }
     if(!user)return json({error:'Accesso Telegram richiesto'},403);
     const body=await request.json().catch(()=>null);
@@ -227,9 +234,9 @@ export default {
      const token=await env.DB.prepare('SELECT id FROM tokens WHERE battle_id=? AND id=?').bind(id,body.tokenId).first();
      if(!token)return json({error:'Pedina non trovata'},404);
      const c=body.conditions;
-     if(!c||!Number.isInteger(c.wounds)||c.wounds<0||c.wounds>10||['shaken','distracted','vulnerable'].some(k=>typeof c[k]!=='boolean'))return json({error:'Stati non validi'},400);
+     if(!c||!Number.isInteger(c.wounds)||c.wounds<0||c.wounds>10||['shaken','distracted','vulnerable'].some(k=>typeof c[k]!=='boolean')||(c.ko!==undefined&&typeof c.ko!=='boolean'))return json({error:'Stati non validi'},400);
      battleState.tokenStates=battleState.tokenStates||{};
-     battleState.tokenStates[body.tokenId]={wounds:c.wounds,shaken:c.shaken,distracted:c.distracted,vulnerable:c.vulnerable};
+     battleState.tokenStates[body.tokenId]={wounds:c.wounds,shaken:c.shaken,distracted:c.distracted,vulnerable:c.vulnerable,ko:!!c.ko};
      await env.DB.prepare('UPDATE battles SET state=? WHERE id=?').bind(JSON.stringify(battleState),id).run();
      return json({ok:true});
     }
