@@ -21,3 +21,39 @@ input[type=range]{accent-color:#e5b663}
 #areaRequests>div{background:#182a3b;border:1px solid #496075;border-radius:9px;padding:7px}
 #measureResult{display:inline-block;color:#ffdc8a;font-weight:700;padding:5px}
 @media(max-width:480px){body{padding:10px 8px 32px!important}button{font-size:14px!important;padding:9px 10px!important}select{width:min(100%,360px)}}
+
+
+/* UI refresh: visual-only improvements; original IDs and behavior preserved. */
+:root{--focus-ring:#f3cc78}
+body{overflow-wrap:break-word;-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit}
+button{cursor:pointer;line-height:1.25;vertical-align:middle}
+button:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--focus-ring);outline-offset:3px}
+button:not([hidden]){max-width:100%;white-space:normal}
+#map{touch-action:none;max-width:100%;height:auto}
+#info{line-height:1.5}
+#initiativeList,#initiativeChoices,#initiativeRequests,#areaRequests,#myBattlesList{min-width:0;overflow-wrap:anywhere}
+#initiativeList p{line-height:1.5}
+#tokenEditor,#masterPanel,#mapPanel,#gridPanel,#initiativePanel,#areaPanel,#conditionsPanel{scroll-margin-top:12px}
+#tokenEditor label,#masterPanel label,#mapPanel label,#gridPanel label,#conditionsPanel label{display:block;margin:9px 0}
+input:not([type=checkbox]):not([type=range]),select{padding:9px 11px;min-height:44px}
+input[type=checkbox]{width:20px;height:20px;margin-right:7px}
+input[type=range]{width:min(100%,320px);vertical-align:middle}
+#conditionsPanel{background:linear-gradient(180deg,#273b50,#1c2a3a);border:1px solid var(--edge);border-radius:14px;padding:14px;margin:10px 0 14px}
+#myBattles{border-radius:14px!important}
+#initiativeStatus{font-weight:600;margin-bottom:10px}
+#measureResult{min-height:32px}
+@media(max-width:600px){
+ body{padding:10px 9px 28px!important}
+ h2{font-size:24px;margin:3px 0 10px}
+ button{min-height:46px;font-size:14px!important;margin:4px 2px!important;padding:11px 12px!important}
+ #info{padding:10px!important;margin-bottom:10px}
+ #tokenEditor,#masterPanel,#mapPanel,#gridPanel,#initiativePanel,#areaPanel,#conditionsPanel{padding:12px!important}
+ #map{border-width:1px}
+ #measureButton,#areaButton,#initiativeButton,#conditionsButton{min-height:48px}
+ #initiativeMaster button,#tokenEditor button,#mapPanel button,#gridPanel button,#conditionsPanel button{margin-bottom:7px!important}
+ input:not([type=checkbox]):not([type=range]),select{width:100%;max-width:100%;font-size:16px}
+ #mapZoom,#mapX,#mapY{width:100%}
+}
+@media(prefers-reduced-motion:reduce){button{transition:none!important}button:active{transform:none!important}}
